@@ -12,9 +12,12 @@ using testing::ElementsAreArray;
 static_assert(std::is_trivially_default_constructible_v<jell::inplace_vector<int, 0>>);
 static_assert(sizeof(jell::inplace_vector<int, 0>) < sizeof(int));
 static_assert(jell::inplace_vector<int, 0>{}.size() == 0);
-static_assert(jell::inplace_vector<int, 0>{}.max_size() == 0);
-static_assert(jell::inplace_vector<int, 0>{}.capacity() == 0);
+static_assert(jell::inplace_vector<int, 0>::max_size() == 0);
+static_assert(jell::inplace_vector<int, 0>::capacity() == 0);
 static_assert(jell::inplace_vector<int, 0>{}.data() == nullptr);
+
+static_assert(std::random_access_iterator<jell::inplace_vector<int, 1>::iterator>);
+static_assert(std::contiguous_iterator<jell::inplace_vector<int, 1>::iterator>);
 
 namespace {
 
@@ -25,7 +28,7 @@ protected:
     static auto test_values()
     {
         using value_type = typename T::value_type;
-        constexpr auto size = T{}.max_size();
+        constexpr auto size = T::max_size();
 
         std::array<value_type, size> a;
         for (int i = 0; i != static_cast<int>(size); ++i) {
@@ -75,7 +78,7 @@ TYPED_TEST(InplaceVectorTest, isDefaultConstructible)
 
 TYPED_TEST(InplaceVectorTest, isSizeConstructible)
 {
-    constexpr auto count = TypeParam{}.max_size() / 2;
+    constexpr auto count = TypeParam::max_size() / 2;
 
     TypeParam v(count);
     EXPECT_EQ(v.size(), count);
@@ -83,7 +86,7 @@ TYPED_TEST(InplaceVectorTest, isSizeConstructible)
 
 TYPED_TEST(InplaceVectorTest, sizeConstructorOverflow)
 {
-    constexpr auto count = TypeParam{}.max_size() + 1;
+    constexpr auto count = TypeParam::max_size() + 1;
 
     EXPECT_THROW((TypeParam(count)), std::bad_alloc);
 }
@@ -125,8 +128,8 @@ TYPED_TEST(InplaceVectorTest, isMoveConstructible)
     for (auto& element : this->test_values()) {
         v1.emplace_back(std::move(element));
     }
-    TypeParam v2(std::move(v1));
-    auto values = this->test_values();
+    const TypeParam v2(std::move(v1));
+    const auto values = this->test_values();
     EXPECT_TRUE(std::equal(v2.begin(), v2.end(), values.begin(), values.end()));
 }
 
@@ -134,9 +137,18 @@ TYPED_TEST(InplaceVectorTest, isInitializerListConstructible)
 {
     using value_type = typename TypeParam::value_type;
     if constexpr (std::is_copy_constructible_v<value_type>) {
-        if (TypeParam{}.max_size() >= 3) {
+        if constexpr (TypeParam::max_size() >= 3) {
             TypeParam v{value_type{}, value_type{}, value_type{}};
             EXPECT_EQ(v.size(), 3);
         }
     }
+}
+
+TYPED_TEST(InplaceVectorTest, iteratorComparison)
+{
+    TypeParam v;
+    EXPECT_EQ(v.begin(), v.begin());
+    EXPECT_EQ(v.begin(), v.cbegin());
+    EXPECT_EQ(v.end(), v.end());
+    EXPECT_EQ(v.end(), v.cend());
 }

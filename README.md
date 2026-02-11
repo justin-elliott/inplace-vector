@@ -9,7 +9,7 @@ Building the project requires clang and libc++ version 20 or later.
 ```sh
 mkdir build
 cd build
-cmake -DCMAKE_CXX_FLAGS="-stdlib=libc++" ..
+cmake ..
 make
 ```
 

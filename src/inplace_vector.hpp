@@ -53,6 +53,101 @@ struct storage<T, 0, IsTriviallyDestructible>
     constexpr void clear() noexcept {}
 };
 
+template <typename T>
+class iterator
+{
+    friend iterator<std::add_const_t<T>>;
+
+public:
+    using difference_type = std::ptrdiff_t;
+    using value_type = std::remove_cv_t<T>;
+    using pointer = T*;
+    using reference = T&;
+    using iterator_category = std::random_access_iterator_tag;
+    using iterator_concept = std::contiguous_iterator_tag;
+
+    constexpr iterator() noexcept = default;
+    constexpr explicit iterator(pointer p) noexcept : p_{p} {}
+
+    constexpr iterator(const iterator& other) : p_{other.p_} {}
+    constexpr iterator(const iterator<std::remove_const_t<T>>& other) requires std::is_const_v<T> : p_{other.p_} {}
+    
+    constexpr iterator& operator=(const iterator<T>& other) noexcept
+    {
+        p_ = other.p_;
+        return *this;
+    }
+
+    constexpr reference operator*() const noexcept { return *p_; }
+    constexpr pointer operator->() const noexcept { return p_; }
+
+    constexpr reference operator[](difference_type n) const noexcept { return p_[n]; }
+    
+    constexpr iterator& operator++() noexcept
+    {
+        ++p_;
+        return *this;
+    }
+
+    constexpr iterator operator++(int) noexcept
+    {
+        iterator pre{p_};
+        ++p_;
+        return pre;
+    }
+
+    constexpr iterator& operator--() noexcept
+    {
+        --p_;
+        return *this;
+    }
+
+    constexpr iterator operator--(int) noexcept
+    {
+        iterator pre{p_};
+        --p_;
+        return pre;
+    }
+
+    constexpr iterator& operator+=(difference_type n) noexcept
+    {
+        p_ += n;
+        return *this;
+    }
+
+    constexpr iterator& operator-=(difference_type n) noexcept
+    {
+        p_ -= n;
+        return *this;
+    }
+
+    friend constexpr iterator operator+(const iterator& lhs, difference_type n) noexcept
+    {
+        return {lhs.p_ + n};
+    }
+
+    friend constexpr iterator operator+(difference_type n, const iterator& rhs) noexcept
+    {
+        return {n + rhs.p_};
+    }
+
+    friend constexpr iterator operator-(const iterator& lhs, difference_type n) noexcept
+    {
+        return {lhs.p_ - n};
+    }
+
+    friend constexpr difference_type operator-(const iterator& lhs, const iterator& rhs) noexcept
+    {
+        return lhs.p_ - rhs.p_;
+    }
+
+    friend constexpr bool operator==(const iterator& lhs, const iterator& rhs) noexcept = default;
+    friend constexpr bool operator<=>(const iterator& lhs, const iterator& rhs) noexcept = default;
+
+private:
+    pointer p_{nullptr};
+};
+
 } // namespace inplace_vector_detail
 
 template <typename T, std::size_t N>
@@ -67,8 +162,8 @@ public:
     using const_reference = const value_type&;
     using pointer = T*;
     using const_pointer = const T*;
-    using iterator = pointer;
-    using const_iterator = const_pointer;
+    using iterator = inplace_vector_detail::iterator<T>;
+    using const_iterator = inplace_vector_detail::iterator<const T>;
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
@@ -158,8 +253,8 @@ public:
 
     constexpr bool empty() const noexcept { return size() == 0; }
     constexpr size_type size() const noexcept { return storage_.size(); }
-    constexpr size_type max_size() const noexcept { return N; }
-    constexpr size_type capacity() const noexcept { return N; }
+    static constexpr size_type max_size() noexcept { return N; }
+    static constexpr size_type capacity() noexcept { return N; }
 
     template <typename... Args>
     constexpr reference emplace_back(Args&&... args)
