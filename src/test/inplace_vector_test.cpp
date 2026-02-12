@@ -130,6 +130,7 @@ TYPED_TEST(InplaceVectorTest, isMoveConstructible)
     }
     const TypeParam v2(std::move(v1));
     const auto values = this->test_values();
+    EXPECT_EQ(v2.size(), values.size());
     EXPECT_TRUE(std::equal(v2.begin(), v2.end(), values.begin(), values.end()));
 }
 
@@ -144,6 +145,18 @@ TYPED_TEST(InplaceVectorTest, isInitializerListConstructible)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, assignable)
+{
+    if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const TypeParam v1(std::from_range, this->test_values());
+
+        TypeParam v2;
+        v2 = v1;
+
+        EXPECT_EQ(v1, v2);
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, iteratorComparison)
 {
     TypeParam v;
@@ -151,4 +164,8 @@ TYPED_TEST(InplaceVectorTest, iteratorComparison)
     EXPECT_EQ(v.begin(), v.cbegin());
     EXPECT_EQ(v.end(), v.end());
     EXPECT_EQ(v.end(), v.cend());
+
+    typename TypeParam::const_iterator ci;
+    ci = v.cbegin();
+    EXPECT_EQ(ci, v.begin());
 }

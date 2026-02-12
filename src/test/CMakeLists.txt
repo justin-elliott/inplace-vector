@@ -4,6 +4,9 @@ add_executable(
     InplaceVectorTest
     inplace_vector_test.cpp
 )
+target_compile_definitions(
+    InplaceVectorTest PUBLIC CHECKED_ITERATORS=1
+)
 target_link_libraries(
     InplaceVectorTest
     InplaceVector
