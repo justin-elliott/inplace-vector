@@ -19,3 +19,10 @@ make
 cd build
 make && make test
 ```
+
+## Code Coverage
+
+```sh
+cd build
+make && make test && make coverage
+```
