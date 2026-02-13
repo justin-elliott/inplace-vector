@@ -114,7 +114,7 @@ struct storage<T, 0>
     [[nodiscard]] constexpr T*          data()       noexcept { return nullptr; }
     [[nodiscard]] constexpr const T*    data() const noexcept { return nullptr; }
     [[nodiscard]] constexpr std::size_t size() const          { return 0; }
-                  constexpr void        size(std::size_t n)   {}
+                  constexpr void        size(std::size_t)     {}
 
     template <typename... Args>
     constexpr T* construct_at(std::size_t, Args&&...) noexcept { return nullptr; }
@@ -475,7 +475,7 @@ private:
         inplace_vector* v_;
     };
 
-    inplace_vector_detail::storage<T, N> storage_;
+    [[no_unique_address]] inplace_vector_detail::storage<T, N> storage_;
 };
 
 } // namespace jell

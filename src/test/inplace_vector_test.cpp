@@ -1,6 +1,5 @@
 #include "inplace_vector.hpp"
 
-#include <array>
 #include <numeric>
 #include <vector>
 
@@ -10,7 +9,6 @@
 using testing::ElementsAreArray;
 
 static_assert(std::is_trivially_default_constructible_v<jell::inplace_vector<int, 0>>);
-static_assert(sizeof(jell::inplace_vector<int, 0>) < sizeof(int));
 static_assert(jell::inplace_vector<int, 0>{}.size() == 0);
 static_assert(jell::inplace_vector<int, 0>::max_size() == 0);
 static_assert(jell::inplace_vector<int, 0>::capacity() == 0);
@@ -19,37 +17,41 @@ static_assert(jell::inplace_vector<int, 0>{}.data() == nullptr);
 static_assert(std::random_access_iterator<jell::inplace_vector<int, 1>::iterator>);
 static_assert(std::contiguous_iterator<jell::inplace_vector<int, 1>::iterator>);
 
+struct ZeroVector
+{
+    int non_empty;
+    [[no_unique_address]] jell::inplace_vector<int, 0> empty;
+};
+static_assert(sizeof(ZeroVector) == sizeof(ZeroVector::non_empty));
+
 namespace {
 
 template <typename T>
 class InplaceVectorTest : public testing::Test
 {
 protected:
-    static void populate_test_values(T& v)
+    static void append_test_values(T& v, const std::size_t n = T::max_size())
     {
-        v.clear();
-        auto values = test_values();
-        for (auto& value : values) {
+        for (auto& value : test_values(n)) {
             v.emplace_back(std::move(value));
         }
     }
 
-    static bool equal_to_test_values(const T& v)
+    static bool equal_to_test_values(const T& v, const std::size_t n = T::max_size())
     {
-        const auto values = test_values();
+        const auto values = test_values(n);
         return std::equal(v.begin(), v.end(), values.begin(), values.end());
     }
 
-    static auto test_values()
+    static auto test_values(const std::size_t n = T::max_size())
     {
         using value_type = typename T::value_type;
-        constexpr auto size = T::max_size();
 
-        std::array<value_type, size> a;
-        for (int i = 0; i != static_cast<int>(size); ++i) {
-            a[i] = value_type{i};
-        }
-        return a;
+        std::vector<value_type> v;
+        std::generate_n(std::back_inserter(v), n, [value = 100] mutable {
+            return value_type{value++};
+        });
+        return v;
     }
 };
 
@@ -163,7 +165,7 @@ TYPED_TEST(InplaceVectorTest, is_copy_constructible)
 TYPED_TEST(InplaceVectorTest, is_move_constructible)
 {
     TypeParam v1;
-    this->populate_test_values(v1);
+    this->append_test_values(v1);
 
     const TypeParam v2(std::move(v1));
     EXPECT_TRUE(this->equal_to_test_values(v2));
@@ -180,7 +182,7 @@ TYPED_TEST(InplaceVectorTest, is_initializer_list_constructible)
     }
 }
 
-TYPED_TEST(InplaceVectorTest, is_assignable)
+TYPED_TEST(InplaceVectorTest, is_assignable_initially_empty)
 {
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
         const TypeParam v1(std::from_range, this->test_values());
@@ -192,11 +194,35 @@ TYPED_TEST(InplaceVectorTest, is_assignable)
     }
 }
 
-TYPED_TEST(InplaceVectorTest, is_move_assignable)
+TYPED_TEST(InplaceVectorTest, is_assignable_initially_nonempty_and_smaller)
+{
+    if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
+        const TypeParam v1(std::from_range, this->test_values());
+
+        TypeParam v2(std::from_range, this->test_values(TypeParam::max_size() / 2));
+        v2 = v1;
+
+        EXPECT_EQ(v1, v2);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, is_assignable_initially_nonempty_and_larger)
+{
+    if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
+        const TypeParam v1(std::from_range, this->test_values(TypeParam::max_size() / 2));
+
+        TypeParam v2(std::from_range, this->test_values());
+        v2 = v1;
+
+        EXPECT_EQ(v1, v2);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_empty)
 {
     if constexpr (std::is_move_assignable_v<typename TypeParam::value_type>) {
         TypeParam v1;
-        this->populate_test_values(v1);
+        this->append_test_values(v1);
 
         TypeParam v2;
         v2 = std::move(v1);
@@ -204,11 +230,39 @@ TYPED_TEST(InplaceVectorTest, is_move_assignable)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_nonempty_and_smaller)
+{
+    if constexpr (std::is_move_assignable_v<typename TypeParam::value_type>) {
+        TypeParam v1;
+        this->append_test_values(v1);
+
+        TypeParam v2;
+        this->append_test_values(v2, TypeParam::max_size() / 2);
+
+        v2 = std::move(v1);
+        EXPECT_TRUE(this->equal_to_test_values(v2));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_nonempty_and_larger)
+{
+    if constexpr (std::is_move_assignable_v<typename TypeParam::value_type>) {
+        TypeParam v1;
+        this->append_test_values(v1, TypeParam::max_size() / 2);
+
+        TypeParam v2;
+        this->append_test_values(v2);
+
+        v2 = std::move(v1);
+        EXPECT_TRUE(this->equal_to_test_values(v2, TypeParam::max_size() / 2));
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_pop_back)
 {
     if constexpr (TypeParam::max_size() != 0) {
         TypeParam v;
-        this->populate_test_values(v);
+        this->append_test_values(v);
 
         const auto size = v.size();
         v.pop_back();
@@ -241,6 +295,8 @@ TYPED_TEST(InplaceVectorTest, can_compare_iterators)
     EXPECT_EQ(v.begin(), v.cbegin());
     EXPECT_EQ(v.end(), v.end());
     EXPECT_EQ(v.end(), v.cend());
+
+    EXPECT_LE(v.begin(), v.end());
 
     typename TypeParam::const_iterator ci;
     ci = v.cbegin();
