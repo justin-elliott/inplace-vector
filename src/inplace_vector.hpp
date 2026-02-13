@@ -22,108 +22,106 @@ concept container_compatible_range =
     std::ranges::input_range<R> &&
     std::convertible_to<std::ranges::range_reference_t<R>, T>;
 
-template <typename T, std::size_t N, typename IsTriviallyDestructible = std::is_trivially_destructible<T>>
+template <typename T, std::size_t N>
 struct storage
 {
+    constexpr storage() noexcept = default;
+
+    constexpr storage(const storage&) noexcept requires std::is_trivially_copy_constructible_v<T> = default;
+    constexpr storage(const storage& other) noexcept(std::is_nothrow_copy_constructible_v<T>)
+    {
+        for (; size_ != other.size_; ++size_) {
+            construct_at(size_, other.data()[size_]);
+        }
+    }
+
+    constexpr storage(storage&&) noexcept requires std::is_trivially_move_constructible_v<T> = default;
+    constexpr storage(storage&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
+    {
+        for (; size_ != other.size_; ++size_) {
+            construct_at(size_, std::move(other.data()[size_]));
+        }
+        other.size_ = 0;
+    }
+
+    constexpr ~storage() requires std::is_trivially_destructible_v<T> = default;
+    constexpr ~storage()
+    {
+        destroy_all();
+    }
+
+    constexpr storage& operator=(const storage&) noexcept requires std::is_trivially_copy_assignable_v<T> = default;
+    constexpr storage& operator=(const storage& other) noexcept(std::is_nothrow_copy_assignable_v<T>)
+    {
+        for (; size_ > other.size_; --size_) {
+            destroy_at(size_ - 1);
+        }
+        for (std::size_t i = 0; i != size_; ++i) {
+            data()[i] = other.data()[i];
+        }
+        for (; size_ < other.size_; ++size_) {
+            construct_at(size_, other.data()[size_]);
+        }
+        return *this;
+    }
+
+    constexpr storage& operator=(storage&&) noexcept requires std::is_trivially_move_assignable_v<T> = default;
+    constexpr storage& operator=(storage&& other) noexcept(std::is_nothrow_move_assignable_v<T>)
+    {
+        for (; size_ > other.size_; --size_) {
+            destroy_at(size_ - 1);
+        }
+        for (std::size_t i = 0; i != size_; ++i) {
+            data()[i] = std::move(other.data()[i]);
+        }
+        for (; size_ < other.size_; ++size_) {
+            construct_at(size_, std::move(other.data()[size_]));
+        }
+        other.size_ = 0;
+        return *this;
+    }
+
+    [[nodiscard]] constexpr T*          data()       noexcept { return reinterpret_cast<T*>(data_); }
+    [[nodiscard]] constexpr const T*    data() const noexcept { return reinterpret_cast<const T*>(data_); }
+    [[nodiscard]] constexpr std::size_t size() const          { return size_; }
+                  constexpr void        size(std::size_t n)   { size_ = n; }
+
+    template <typename... Args>
+    constexpr T* construct_at(std::size_t i, Args&&... args) noexcept(noexcept(T(std::forward<Args>(args)...)))
+    {
+        return std::ranges::construct_at(data() + i, std::forward<Args>(args)...);
+    }
+
+    constexpr void destroy_at(std::size_t)   noexcept requires std::is_trivially_destructible_v<T> {}
+    constexpr void destroy_at(std::size_t i) noexcept
+    {
+        std::ranges::destroy_at(data() + i);
+    }
+    
+    constexpr void destroy_all() noexcept requires std::is_trivially_destructible_v<T> {}
+    constexpr void destroy_all() noexcept
+    {
+        std::ranges::destroy_n(data_, size_);
+    }
+
     alignas(T) std::byte data_[N * sizeof(T)];
     std::size_t size_{0};
 };
 
-template <typename T, std::size_t N>
-struct storage<T, N, std::false_type>
+template <typename T>
+struct storage<T, 0>
 {
-    constexpr ~storage();
+    [[nodiscard]] constexpr T*          data()       noexcept { return nullptr; }
+    [[nodiscard]] constexpr const T*    data() const noexcept { return nullptr; }
+    [[nodiscard]] constexpr std::size_t size() const          { return 0; }
+                  constexpr void        size(std::size_t n)   {}
 
-    alignas(T) std::byte data_[N * sizeof(T)];
-    std::size_t size_{0};
+    template <typename... Args>
+    constexpr T* construct_at(std::size_t, Args&&...) noexcept { return nullptr; }
+
+    constexpr void destroy_at(std::size_t) noexcept {}
+    constexpr void destroy_all() noexcept {}
 };
-
-template <typename T, typename IsTriviallyDestructible>
-struct storage<T, 0, IsTriviallyDestructible>
-{
-};
-
-template <typename T, std::size_t N>
-concept non_empty = requires (storage<T, N> s) {
-    s.data_;
-    s.size_;
-};
-
-template <typename T, std::size_t N>
-concept empty = !non_empty<T, N>;
-
-template <typename T, std::size_t N>
-[[nodiscard]] constexpr T* data(storage<T, N>& s) noexcept requires non_empty<T, N>
-{
-    return reinterpret_cast<T*>(s.data_);
-}
-
-template <typename T, std::size_t N>
-[[nodiscard]] constexpr const T* data(const storage<T, N>& s) noexcept requires non_empty<T, N>
-{
-    return reinterpret_cast<const T*>(s.data_);
-}
-
-template <typename T, std::size_t N>
-[[nodiscard]] constexpr std::size_t size(const storage<T, N>& s) noexcept requires non_empty<T, N>
-{
-    return s.size_;
-}
-
-template <typename T, std::size_t N>
-constexpr void size(storage<T, N>& s, std::size_t size) noexcept requires non_empty<T, N>
-{
-    s.size_ = size;
-}
-
-template <typename T, std::size_t N>
-constexpr void clear(storage<T, N>& s) noexcept
-    requires non_empty<T, N> && std::is_trivially_destructible_v<T>
-{
-    s.size_ = 0;
-}
-
-template <typename T, std::size_t N>
-constexpr void clear(storage<T, N>& s) noexcept
-    requires non_empty<T, N> && (!std::is_trivially_destructible_v<T>)
-{
-    std::destroy_n(data(s), size(s));
-    s.size_ = 0;
-}
-
-template <typename T, std::size_t N>
-[[nodiscard]] constexpr T* data(storage<T, N>&) noexcept requires empty<T, N>
-{
-    return nullptr;
-}
-
-template <typename T, std::size_t N>
-[[nodiscard]] constexpr const T* data(const storage<T, N>&) noexcept requires empty<T, N>
-{
-    return nullptr;
-}
-
-template <typename T, std::size_t N>
-[[nodiscard]] constexpr std::size_t size(const storage<T, N>&) noexcept requires empty<T, N>
-{
-    return 0;
-}
-
-template <typename T, std::size_t N>
-constexpr void size(storage<T, N>&, std::size_t) noexcept requires empty<T, N>
-{
-}
-
-template <typename T, std::size_t N>
-constexpr void clear(storage<T, N>&) noexcept requires empty<T, N>
-{
-}
-
-template <typename T, std::size_t N>
-constexpr storage<T, N, std::false_type>::~storage()
-{
-    clear(*this);
-}
 
 // define CHECKED_ITERATORS to enable bounds checking.
 template <typename T>
@@ -362,20 +360,9 @@ public:
     {
     }
 
-    constexpr inplace_vector(const inplace_vector& other)
-        : inplace_vector(other.begin(), other.end())
-    {
-    }
-
-    constexpr inplace_vector(inplace_vector&& other) noexcept(N == 0 || std::is_nothrow_move_constructible_v<T>)
-    {
-        exception_guard guard{this};
-        for (iterator first = other.begin(), last = other.end(); first != last; ++first) {
-            emplace_back(std::move(*first));
-        }
-        other.clear();
-        guard.release();
-    }
+    constexpr inplace_vector(const inplace_vector& other) = default;
+    constexpr inplace_vector(inplace_vector&& other)
+        noexcept(N == 0 || std::is_nothrow_move_constructible_v<T>) = default;
 
     constexpr inplace_vector(std::initializer_list<value_type> init)
         : inplace_vector(init.begin(), init.end())
@@ -384,10 +371,14 @@ public:
 
     constexpr ~inplace_vector() = default;
 
-    constexpr inplace_vector& operator=(const inplace_vector& other) = default; // TODO
-
+    constexpr inplace_vector& operator=(const inplace_vector& other) = default;
     constexpr inplace_vector& operator=(inplace_vector&& other)
-        noexcept(N == 0 || (std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>));
+        noexcept(N == 0 || (std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>)) = default;
+
+    constexpr void assign(size_type count, const value_type& value)
+    {
+        resize(size() + count, value);
+    }
 
     constexpr reference operator[](size_type pos)
     {
@@ -399,8 +390,8 @@ public:
         return *(data() + pos);
     }
 
-    constexpr pointer data() noexcept { return inplace_vector_detail::data(storage_); }
-    constexpr const_pointer data() const noexcept { return inplace_vector_detail::data(storage_); }
+    constexpr pointer data() noexcept { return storage_.data(); }
+    constexpr const_pointer data() const noexcept { return storage_.data(); }
     
     constexpr iterator begin() noexcept { return iterator{data(), data(), size()}; }
     constexpr const_iterator begin() const noexcept { return const_iterator{data(), data(), size()}; }
@@ -411,9 +402,29 @@ public:
     constexpr const_iterator cend() const noexcept { return end(); }
 
     constexpr bool empty() const noexcept { return size() == 0; }
-    constexpr size_type size() const noexcept { return inplace_vector_detail::size(storage_); }
+    constexpr size_type size() const noexcept { return storage_.size(); }
     static constexpr size_type max_size() noexcept { return N; }
     static constexpr size_type capacity() noexcept { return N; }
+
+    void resize(size_type count)
+    {
+        while (size() > count) {
+            pop_back();
+        }
+        while (size() < count) {
+            emplace_back();
+        }
+    }
+
+    void resize(size_type count, const value_type& value)
+    {
+        while (size() > count) {
+            pop_back();
+        }
+        while (size() < count) {
+            emplace_back(value);
+        }
+    }
 
     template <typename... Args>
     constexpr reference emplace_back(Args&&... args)
@@ -421,13 +432,22 @@ public:
         if (size() == capacity()) {
             throw std::bad_alloc{};
         }
-        pointer pos = data() + size();
-        std::construct_at(pos, std::forward<Args>(args)...);
-        inplace_vector_detail::size(storage_, size() + 1);
+        const auto pos = storage_.construct_at(storage_.size(), std::forward<Args>(args)...);
+        storage_.size(storage_.size() + 1);
         return *pos;
     }
 
-    constexpr void clear() noexcept { inplace_vector_detail::clear(storage_); }
+    constexpr void pop_back()
+    {
+        storage_.destroy_at(size() - 1);
+        storage_.size(size() - 1);
+    }
+
+    constexpr void clear() noexcept
+    {
+        storage_.destroy_all();
+        storage_.size(0);
+    }
 
     constexpr friend bool operator==(const inplace_vector& lhs, const inplace_vector& rhs)
     {
