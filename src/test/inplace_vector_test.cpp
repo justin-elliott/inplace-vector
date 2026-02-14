@@ -499,6 +499,26 @@ TYPED_TEST(InplaceVectorTest, can_resize_value_larger)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, reserve_below_capacity)
+{
+    TypeParam v;
+    v.reserve(TypeParam::capacity() / 2);
+    EXPECT_EQ(v.capacity(), TypeParam::capacity()); // reserve() has no effect
+}
+
+TYPED_TEST(InplaceVectorTest, reserve_above_capacity)
+{
+    TypeParam v;
+    EXPECT_THROW(v.reserve(TypeParam::capacity() + 1), std::bad_alloc);
+}
+
+TYPED_TEST(InplaceVectorTest, shrink_to_fit)
+{
+    TypeParam v;
+    this->append_test_values(v, TypeParam::capacity() / 2);
+    EXPECT_NO_THROW(v.shrink_to_fit());
+}
+
 TYPED_TEST(InplaceVectorTest, can_emplace_back)
 {
     if constexpr (TypeParam::capacity() != 0) {

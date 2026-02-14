@@ -478,6 +478,15 @@ public:
         }
     }
 
+    static constexpr void reserve(std::size_t new_capacity)
+    {
+        if (new_capacity > capacity()) {
+            throw std::bad_alloc{};
+        }
+    }
+
+    static constexpr void shrink_to_fit() noexcept {}
+
     template <typename... Args>
     constexpr reference emplace_back(Args&&... args)
     {
