@@ -3,12 +3,9 @@
 #include <array>
 #include <limits>
 #include <numeric>
-#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
-using testing::ElementsAreArray;
 
 static_assert(std::is_trivially_default_constructible_v<jell::inplace_vector<int, 0>>);
 static_assert(jell::inplace_vector<int, 0>{}.size() == 0);
