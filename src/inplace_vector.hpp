@@ -419,6 +419,12 @@ public:
         assign(init.begin(), init.end());
     }
 
+    template <inplace_vector_detail::container_compatible_range<T> R>
+    constexpr void assign_range(R&& rg)
+    {
+        assign(std::begin(rg), std::end(rg));
+    }
+
     constexpr reference at(size_type pos)
     {
         range_check(pos);

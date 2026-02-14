@@ -383,6 +383,17 @@ TYPED_TEST(InplaceVectorTest, can_assign_initializer_list)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, can_assign_range)
+{
+    if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const auto values = this->test_values();
+
+        TypeParam v;
+        v.assign_range(values);
+        EXPECT_THAT(v, ElementsAreArray(values));
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, at_in_range)
 {
     if constexpr (TypeParam::capacity() != 0) {
