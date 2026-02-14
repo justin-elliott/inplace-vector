@@ -30,20 +30,20 @@ template <typename T>
 class InplaceVectorTest : public testing::Test
 {
 protected:
-    static void append_test_values(T& v, const std::size_t n = T::max_size())
+    static void append_test_values(T& v, const std::size_t n = T::capacity())
     {
         for (auto& value : test_values(n)) {
             v.emplace_back(std::move(value));
         }
     }
 
-    static bool equal_to_test_values(const T& v, const std::size_t n = T::max_size())
+    static bool equal_to_test_values(const T& v, const std::size_t n = T::capacity())
     {
         const auto values = test_values(n);
         return std::equal(v.begin(), v.end(), values.begin(), values.end());
     }
 
-    static auto test_values(const std::size_t n = T::max_size())
+    static auto test_values(const std::size_t n = T::capacity())
     {
         using value_type = typename T::value_type;
 
@@ -161,7 +161,7 @@ TYPED_TEST(InplaceVectorTest, is_default_constructible)
 
 TYPED_TEST(InplaceVectorTest, is_size_constructible)
 {
-    constexpr auto count = TypeParam::max_size() / 2;
+    constexpr auto count = TypeParam::capacity() / 2;
 
     TypeParam v(count);
     EXPECT_EQ(v.size(), count);
@@ -169,7 +169,7 @@ TYPED_TEST(InplaceVectorTest, is_size_constructible)
 
 TYPED_TEST(InplaceVectorTest, size_constructor_overflow)
 {
-    constexpr auto count = TypeParam::max_size() + 1;
+    constexpr auto count = TypeParam::capacity() + 1;
 
     EXPECT_THROW((TypeParam(count)), std::bad_alloc);
 }
@@ -177,7 +177,7 @@ TYPED_TEST(InplaceVectorTest, size_constructor_overflow)
 TYPED_TEST(InplaceVectorTest, is_size_value_constructible)
 {
     if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
-        constexpr auto count = TypeParam::max_size() / 2;
+        constexpr auto count = TypeParam::capacity() / 2;
 
         TypeParam v(count, typename TypeParam::value_type{100});
         EXPECT_EQ(v.size(), count);
@@ -187,7 +187,7 @@ TYPED_TEST(InplaceVectorTest, is_size_value_constructible)
 TYPED_TEST(InplaceVectorTest, size_value_constructor_overflow)
 {
     if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
-        constexpr auto count = TypeParam::max_size() + 1;
+        constexpr auto count = TypeParam::capacity() + 1;
 
         EXPECT_THROW((TypeParam(count, typename TypeParam::value_type{100})), std::bad_alloc);
     }
@@ -259,7 +259,7 @@ TYPED_TEST(InplaceVectorTest, is_initializer_list_constructible)
 {
     using value_type = typename TypeParam::value_type;
     if constexpr (std::is_copy_constructible_v<value_type>) {
-        if constexpr (TypeParam::max_size() >= 3) {
+        if constexpr (TypeParam::capacity() >= 3) {
             TypeParam v{value_type{}, value_type{}, value_type{}};
             EXPECT_EQ(v.size(), 3);
         }
@@ -283,7 +283,7 @@ TYPED_TEST(InplaceVectorTest, is_assignable_initially_nonempty_and_smaller)
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
         const TypeParam v1(std::from_range, this->test_values());
 
-        TypeParam v2(std::from_range, this->test_values(TypeParam::max_size() / 2));
+        TypeParam v2(std::from_range, this->test_values(TypeParam::capacity() / 2));
         v2 = v1;
 
         EXPECT_EQ(v1, v2);
@@ -293,7 +293,7 @@ TYPED_TEST(InplaceVectorTest, is_assignable_initially_nonempty_and_smaller)
 TYPED_TEST(InplaceVectorTest, is_assignable_initially_nonempty_and_larger)
 {
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
-        const TypeParam v1(std::from_range, this->test_values(TypeParam::max_size() / 2));
+        const TypeParam v1(std::from_range, this->test_values(TypeParam::capacity() / 2));
 
         TypeParam v2(std::from_range, this->test_values());
         v2 = v1;
@@ -321,7 +321,7 @@ TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_nonempty_and_smaller)
         this->append_test_values(v1);
 
         TypeParam v2;
-        this->append_test_values(v2, TypeParam::max_size() / 2);
+        this->append_test_values(v2, TypeParam::capacity() / 2);
 
         v2 = std::move(v1);
         EXPECT_TRUE(this->equal_to_test_values(v2));
@@ -332,13 +332,13 @@ TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_nonempty_and_larger)
 {
     if constexpr (std::is_move_assignable_v<typename TypeParam::value_type>) {
         TypeParam v1;
-        this->append_test_values(v1, TypeParam::max_size() / 2);
+        this->append_test_values(v1, TypeParam::capacity() / 2);
 
         TypeParam v2;
         this->append_test_values(v2);
 
         v2 = std::move(v1);
-        EXPECT_TRUE(this->equal_to_test_values(v2, TypeParam::max_size() / 2));
+        EXPECT_TRUE(this->equal_to_test_values(v2, TypeParam::capacity() / 2));
     }
 }
 
@@ -347,22 +347,56 @@ TYPED_TEST(InplaceVectorTest, can_assign_count_values)
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
         const typename TypeParam::value_type value_1{123};
         const typename TypeParam::value_type value_2{456};
-        const auto lower_count = TypeParam::max_size() / 2;
-        const auto upper_count = TypeParam::max_size() - lower_count;
+        const auto lower_count = TypeParam::capacity() / 2;
+        const auto upper_count = TypeParam::capacity() - lower_count;
         
         TypeParam v;
         v.assign(lower_count, value_1);
         v.assign(upper_count, value_2);
 
-        EXPECT_EQ(v.size(), TypeParam::max_size());
+        EXPECT_EQ(v.size(), TypeParam::capacity());
         EXPECT_EQ(std::count(v.begin(), v.end(), value_1), lower_count);
         EXPECT_EQ(std::count(v.begin(), v.end(), value_2), upper_count);
     }
 }
 
+TYPED_TEST(InplaceVectorTest, empty)
+{
+    TypeParam v1;
+    EXPECT_TRUE(v1.empty());
+
+    if constexpr (TypeParam::capacity() != 0) {
+        v1.emplace_back(typename TypeParam::value_type{100});
+        EXPECT_FALSE(v1.empty());
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, size)
+{
+    TypeParam v1;
+    EXPECT_EQ(v1.size(), 0);
+
+    if constexpr (TypeParam::capacity() != 0) {
+        v1.emplace_back(typename TypeParam::value_type{100});
+        EXPECT_EQ(v1.size(), 1);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, max_size)
+{
+    TypeParam v1;
+    EXPECT_LE(v1.size(), v1.max_size());
+}
+
+TYPED_TEST(InplaceVectorTest, capacity)
+{
+    TypeParam v1;
+    EXPECT_LE(v1.size(), v1.capacity());
+}
+
 TYPED_TEST(InplaceVectorTest, can_resize_smaller)
 {
-    constexpr auto count = TypeParam::max_size();
+    constexpr auto count = TypeParam::capacity();
 
     TypeParam v(count);
     v.resize(count / 2);
@@ -371,7 +405,7 @@ TYPED_TEST(InplaceVectorTest, can_resize_smaller)
 
 TYPED_TEST(InplaceVectorTest, can_resize_larger)
 {
-    constexpr auto count = TypeParam::max_size() / 2;
+    constexpr auto count = TypeParam::capacity() / 2;
 
     TypeParam v(count);
     v.resize(count * 2);
@@ -381,7 +415,7 @@ TYPED_TEST(InplaceVectorTest, can_resize_larger)
 TYPED_TEST(InplaceVectorTest, can_resize_value_smaller)
 {
     if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
-        constexpr auto count = TypeParam::max_size();
+        constexpr auto count = TypeParam::capacity();
 
         TypeParam v(count);
         v.resize(count / 2, typename TypeParam::value_type{100});
@@ -392,7 +426,7 @@ TYPED_TEST(InplaceVectorTest, can_resize_value_smaller)
 TYPED_TEST(InplaceVectorTest, can_resize_value_larger)
 {
     if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
-        constexpr auto count = TypeParam::max_size() / 2;
+        constexpr auto count = TypeParam::capacity() / 2;
 
         TypeParam v(count);
         v.resize(count * 2, typename TypeParam::value_type{100});
@@ -402,7 +436,7 @@ TYPED_TEST(InplaceVectorTest, can_resize_value_larger)
 
 TYPED_TEST(InplaceVectorTest, can_emplace_back)
 {
-    if constexpr (TypeParam::max_size() != 0) {
+    if constexpr (TypeParam::capacity() != 0) {
         TypeParam v;
         v.emplace_back(typename TypeParam::value_type{100});
     }
@@ -418,7 +452,7 @@ TYPED_TEST(InplaceVectorTest, handles_emplace_back_overflow)
 
 TYPED_TEST(InplaceVectorTest, can_pop_back)
 {
-    if constexpr (TypeParam::max_size() != 0) {
+    if constexpr (TypeParam::capacity() != 0) {
         TypeParam v;
         this->append_test_values(v);
 
@@ -432,7 +466,7 @@ TYPED_TEST(InplaceVectorTest, can_clear)
 {
     TypeParam v;
     this->append_test_values(v);
-    EXPECT_EQ(v.size(), v.max_size());
+    EXPECT_EQ(v.size(), v.capacity());
 
     v.clear();
     EXPECT_EQ(v.size(), 0);
@@ -455,7 +489,7 @@ TYPED_TEST(InplaceVectorTest, can_compare_iterators)
 
 TYPED_TEST(InplaceVectorTest, can_dereference_iterators)
 {
-    if constexpr (TypeParam::max_size() != 0) {
+    if constexpr (TypeParam::capacity() != 0) {
         TypeParam v;
         this->append_test_values(v);
 
@@ -476,4 +510,21 @@ TYPED_TEST(InplaceVectorTest, cant_increment_iterators_past_end)
     EXPECT_THROW(++v.end(), std::range_error);
     EXPECT_THROW(++v.cend(), std::range_error);
 #endif
+}
+
+TEST(StorageTest, can_call_members_in_zero_size)
+{
+    using storage = jell::inplace_vector_detail::storage<int, 0>;
+    storage s;
+
+    EXPECT_EQ(s.data(), nullptr);
+    EXPECT_EQ(const_cast<const storage&>(s).data(), nullptr);
+    EXPECT_EQ(s.size(), 0);
+    EXPECT_EQ(const_cast<const storage&>(s).size(), 0);
+
+    EXPECT_NO_THROW(s.size(0));
+    EXPECT_NO_THROW(s.construct_at(0, 100));
+    EXPECT_NO_THROW(s.destroy_at(0));
+    EXPECT_NO_THROW(s.destroy(0, 0));
+    EXPECT_NO_THROW(s.clear());
 }

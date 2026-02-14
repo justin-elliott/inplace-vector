@@ -59,7 +59,6 @@ struct storage
         for (; size_ != other.size_; ++size_) {
             construct_at(size_, std::move(other.data()[size_]));
         }
-        other.size_ = 0;
         guard.release();
     }
 
@@ -72,8 +71,9 @@ struct storage
     constexpr storage& operator=(const storage&) noexcept requires std::is_trivially_copy_assignable_v<T> = default;
     constexpr storage& operator=(const storage& other) noexcept(std::is_nothrow_copy_assignable_v<T>)
     {
-        for (; size_ > other.size_; --size_) {
-            destroy_at(size_ - 1);
+        if (size_ > other.size_) {
+            destroy(other.size_, size_);
+            size_ = other.size_;
         }
         for (std::size_t i = 0; i != size_; ++i) {
             data()[i] = other.data()[i];
@@ -87,8 +87,9 @@ struct storage
     constexpr storage& operator=(storage&&) noexcept requires std::is_trivially_move_assignable_v<T> = default;
     constexpr storage& operator=(storage&& other) noexcept(std::is_nothrow_move_assignable_v<T>)
     {
-        for (; size_ > other.size_; --size_) {
-            destroy_at(size_ - 1);
+        if (size_ > other.size_) {
+            destroy(other.size_, size_);
+            size_ = other.size_;
         }
         for (std::size_t i = 0; i != size_; ++i) {
             data()[i] = std::move(other.data()[i]);
@@ -434,8 +435,9 @@ public:
 
     void resize(size_type count)
     {
-        while (size() > count) {
-            pop_back();
+        if (size() > count) {
+            storage_.destroy(count, size());
+            storage_.size(count);
         }
         while (size() < count) {
             emplace_back();
@@ -444,8 +446,9 @@ public:
 
     void resize(size_type count, const value_type& value)
     {
-        while (size() > count) {
-            pop_back();
+        if (size() > count) {
+            storage_.destroy(count, size());
+            storage_.size(count);
         }
         while (size() < count) {
             emplace_back(value);
