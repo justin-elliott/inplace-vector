@@ -100,6 +100,49 @@ private:
     int value_{0};
 };
 
+class ThrowOnCopyOrMoveCounter
+{
+public:
+    explicit ThrowOnCopyOrMoveCounter(int counter) : counter_{counter} {}
+
+    ThrowOnCopyOrMoveCounter(const ThrowOnCopyOrMoveCounter& other) : counter_{other.counter_}
+    {
+        if (--counter_ <= 0) {
+            throw std::runtime_error("Copy Constructor");
+        }
+    }
+
+    ThrowOnCopyOrMoveCounter(ThrowOnCopyOrMoveCounter&& other) : counter_{other.counter_}
+    {
+        if (--counter_ <= 0) {
+            throw std::runtime_error("Move Constructor");
+        }
+    }
+
+    ThrowOnCopyOrMoveCounter& operator=(const ThrowOnCopyOrMoveCounter& other)
+    {
+        counter_ = other.counter_;
+        if (--counter_ <= 0) {
+            throw std::runtime_error("Copy Assignment");
+        }
+        return *this;
+    }
+
+    ThrowOnCopyOrMoveCounter& operator=(ThrowOnCopyOrMoveCounter&& other)
+    {
+        counter_ = other.counter_;
+        if (--counter_ <= 0) {
+            throw std::runtime_error("Move Assignment");
+        }
+        return *this;
+    }
+
+    ~ThrowOnCopyOrMoveCounter() = default;
+
+private:
+    int counter_;
+};
+
 using vector_types = testing::Types<
     jell::inplace_vector<int, 32>,
     jell::inplace_vector<int, 0>,
@@ -131,6 +174,25 @@ TYPED_TEST(InplaceVectorTest, size_constructor_overflow)
     EXPECT_THROW((TypeParam(count)), std::bad_alloc);
 }
 
+TYPED_TEST(InplaceVectorTest, is_size_value_constructible)
+{
+    if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        constexpr auto count = TypeParam::max_size() / 2;
+
+        TypeParam v(count, typename TypeParam::value_type{100});
+        EXPECT_EQ(v.size(), count);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, size_value_constructor_overflow)
+{
+    if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        constexpr auto count = TypeParam::max_size() + 1;
+
+        EXPECT_THROW((TypeParam(count, typename TypeParam::value_type{100})), std::bad_alloc);
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, is_iterator_constructible)
 {
     if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
@@ -160,6 +222,28 @@ TYPED_TEST(InplaceVectorTest, is_copy_constructible)
         TypeParam v2(v1);
         EXPECT_THAT(v2, ElementsAreArray(values));
     }
+}
+
+TEST(InplaceVectorTest, handles_throw_in_copy_constructor)
+{
+    const std::size_t size = 4;
+    using inplace_vector = jell::inplace_vector<ThrowOnCopyOrMoveCounter, size>;
+
+    inplace_vector v(size - 1, ThrowOnCopyOrMoveCounter{3});
+    v.emplace_back(ThrowOnCopyOrMoveCounter{2});
+
+    EXPECT_THROW((inplace_vector{v}), std::runtime_error);
+}
+
+TEST(InplaceVectorTest, handles_throw_in_move_constructor)
+{
+    const std::size_t size = 4;
+    using inplace_vector = jell::inplace_vector<ThrowOnCopyOrMoveCounter, size>;
+
+    inplace_vector v(size - 1, ThrowOnCopyOrMoveCounter{3});
+    v.emplace_back(ThrowOnCopyOrMoveCounter{2});
+
+    EXPECT_THROW((inplace_vector{std::move(v)}), std::runtime_error);
 }
 
 TYPED_TEST(InplaceVectorTest, is_move_constructible)
@@ -258,18 +342,6 @@ TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_nonempty_and_larger)
     }
 }
 
-TYPED_TEST(InplaceVectorTest, can_pop_back)
-{
-    if constexpr (TypeParam::max_size() != 0) {
-        TypeParam v;
-        this->append_test_values(v);
-
-        const auto size = v.size();
-        v.pop_back();
-        EXPECT_EQ(v.size(), size - 1);
-    }
-}
-
 TYPED_TEST(InplaceVectorTest, can_assign_count_values)
 {
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
@@ -288,6 +360,84 @@ TYPED_TEST(InplaceVectorTest, can_assign_count_values)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, can_resize_smaller)
+{
+    constexpr auto count = TypeParam::max_size();
+
+    TypeParam v(count);
+    v.resize(count / 2);
+    EXPECT_EQ(v.size(), count / 2);
+}
+
+TYPED_TEST(InplaceVectorTest, can_resize_larger)
+{
+    constexpr auto count = TypeParam::max_size() / 2;
+
+    TypeParam v(count);
+    v.resize(count * 2);
+    EXPECT_EQ(v.size(), count * 2);
+}
+
+TYPED_TEST(InplaceVectorTest, can_resize_value_smaller)
+{
+    if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        constexpr auto count = TypeParam::max_size();
+
+        TypeParam v(count);
+        v.resize(count / 2, typename TypeParam::value_type{100});
+        EXPECT_EQ(v.size(), count / 2);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_resize_value_larger)
+{
+    if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        constexpr auto count = TypeParam::max_size() / 2;
+
+        TypeParam v(count);
+        v.resize(count * 2, typename TypeParam::value_type{100});
+        EXPECT_EQ(v.size(), count * 2);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_emplace_back)
+{
+    if constexpr (TypeParam::max_size() != 0) {
+        TypeParam v;
+        v.emplace_back(typename TypeParam::value_type{100});
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, handles_emplace_back_overflow)
+{
+    TypeParam v;
+    this->append_test_values(v);
+
+    EXPECT_THROW(v.emplace_back(typename TypeParam::value_type{999}), std::bad_alloc);
+}
+
+TYPED_TEST(InplaceVectorTest, can_pop_back)
+{
+    if constexpr (TypeParam::max_size() != 0) {
+        TypeParam v;
+        this->append_test_values(v);
+
+        const auto size = v.size();
+        v.pop_back();
+        EXPECT_EQ(v.size(), size - 1);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_clear)
+{
+    TypeParam v;
+    this->append_test_values(v);
+    EXPECT_EQ(v.size(), v.max_size());
+
+    v.clear();
+    EXPECT_EQ(v.size(), 0);
+}
+
 TYPED_TEST(InplaceVectorTest, can_compare_iterators)
 {
     TypeParam v;
@@ -301,4 +451,29 @@ TYPED_TEST(InplaceVectorTest, can_compare_iterators)
     typename TypeParam::const_iterator ci;
     ci = v.cbegin();
     EXPECT_EQ(ci, v.begin());
+}
+
+TYPED_TEST(InplaceVectorTest, can_dereference_iterators)
+{
+    if constexpr (TypeParam::max_size() != 0) {
+        TypeParam v;
+        this->append_test_values(v);
+
+        EXPECT_EQ(*v.begin(), v[0]);
+        EXPECT_EQ(*v.cbegin(), v[0]);
+
+#if defined(CHECKED_ITERATORS)
+        EXPECT_THROW(*v.end(), std::range_error);
+        EXPECT_THROW(*v.cend(), std::range_error);
+#endif
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, cant_increment_iterators_past_end)
+{
+#if defined(CHECKED_ITERATORS)
+    TypeParam v;
+    EXPECT_THROW(++v.end(), std::range_error);
+    EXPECT_THROW(++v.cend(), std::range_error);
+#endif
 }

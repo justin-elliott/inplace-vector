@@ -22,6 +22,21 @@ concept container_compatible_range =
     std::ranges::input_range<R> &&
     std::convertible_to<std::ranges::range_reference_t<R>, T>;
 
+template <typename T>
+struct exception_guard
+{
+    constexpr explicit exception_guard(T* guarded) : guarded_{guarded} {}
+    constexpr ~exception_guard()
+    {
+        if (guarded_) {
+            guarded_->clear();
+        }
+    }
+    constexpr void release() noexcept { guarded_ = nullptr; }
+
+    T* guarded_;
+};
+
 template <typename T, std::size_t N>
 struct storage
 {
@@ -30,24 +45,28 @@ struct storage
     constexpr storage(const storage&) noexcept requires std::is_trivially_copy_constructible_v<T> = default;
     constexpr storage(const storage& other) noexcept(std::is_nothrow_copy_constructible_v<T>)
     {
+        exception_guard guard{this};
         for (; size_ != other.size_; ++size_) {
             construct_at(size_, other.data()[size_]);
         }
+        guard.release();
     }
 
     constexpr storage(storage&&) noexcept requires std::is_trivially_move_constructible_v<T> = default;
     constexpr storage(storage&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
     {
+        exception_guard guard{this};
         for (; size_ != other.size_; ++size_) {
             construct_at(size_, std::move(other.data()[size_]));
         }
         other.size_ = 0;
+        guard.release();
     }
 
     constexpr ~storage() requires std::is_trivially_destructible_v<T> = default;
     constexpr ~storage()
     {
-        destroy_all();
+        clear();
     }
 
     constexpr storage& operator=(const storage&) noexcept requires std::is_trivially_copy_assignable_v<T> = default;
@@ -87,7 +106,7 @@ struct storage
                   constexpr void        size(std::size_t n)   { size_ = n; }
 
     template <typename... Args>
-    constexpr T* construct_at(std::size_t i, Args&&... args) noexcept(noexcept(T(std::forward<Args>(args)...)))
+    constexpr T* construct_at(std::size_t i, Args&&... args)
     {
         return std::ranges::construct_at(data() + i, std::forward<Args>(args)...);
     }
@@ -98,10 +117,16 @@ struct storage
         std::ranges::destroy_at(data() + i);
     }
     
-    constexpr void destroy_all() noexcept requires std::is_trivially_destructible_v<T> {}
-    constexpr void destroy_all() noexcept
+    constexpr void destroy(std::size_t, std::size_t) noexcept requires std::is_trivially_destructible_v<T> {}
+    constexpr void destroy(std::size_t first, std::size_t last) noexcept
     {
-        std::ranges::destroy_n(data_, size_);
+        std::ranges::destroy(data() + first, data() + last);
+    }
+
+    constexpr void clear() noexcept
+    {
+        destroy(0, size_);
+        size_ = 0;
     }
 
     alignas(T) std::byte data_[N * sizeof(T)];
@@ -120,7 +145,8 @@ struct storage<T, 0>
     constexpr T* construct_at(std::size_t, Args&&...) noexcept { return nullptr; }
 
     constexpr void destroy_at(std::size_t) noexcept {}
-    constexpr void destroy_all() noexcept {}
+    constexpr void destroy(std::size_t, std::size_t) noexcept {}
+    constexpr void clear() noexcept {}
 };
 
 // define CHECKED_ITERATORS to enable bounds checking.
@@ -325,7 +351,7 @@ public:
         if (count > capacity()) {
             throw std::bad_alloc{};
         }
-        exception_guard guard{this};
+        inplace_vector_detail::exception_guard guard{this};
         while (count--) {
             emplace_back();
         }
@@ -337,7 +363,7 @@ public:
         if (count > capacity()) {
             throw std::bad_alloc{};
         }
-        exception_guard guard{this};
+        inplace_vector_detail::exception_guard guard{this};
         while (count--) {
             emplace_back(value);
         }
@@ -347,7 +373,7 @@ public:
     template <typename InputIt>
     constexpr inplace_vector(InputIt first, InputIt last)
     {
-        exception_guard guard{this};
+        inplace_vector_detail::exception_guard guard{this};
         for (; first != last; ++first) {
             emplace_back(*first);
         }
@@ -445,8 +471,7 @@ public:
 
     constexpr void clear() noexcept
     {
-        storage_.destroy_all();
-        storage_.size(0);
+        storage_.clear();
     }
 
     constexpr friend bool operator==(const inplace_vector& lhs, const inplace_vector& rhs)
@@ -460,21 +485,6 @@ public:
     }
 
 private:
-    // In the event of an exception, free all vector elements.
-    struct exception_guard
-    {
-        constexpr explicit exception_guard(inplace_vector* v) : v_{v} {}
-        constexpr ~exception_guard()
-        {
-            if (v_) {
-                v_->clear();
-            }
-        }
-        constexpr void release() noexcept { v_ = nullptr; }
-
-        inplace_vector* v_;
-    };
-
     [[no_unique_address]] inplace_vector_detail::storage<T, N> storage_;
 };
 
