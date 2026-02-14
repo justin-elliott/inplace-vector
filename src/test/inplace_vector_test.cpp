@@ -383,6 +383,48 @@ TYPED_TEST(InplaceVectorTest, can_assign_initializer_list)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, at_in_range)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v;
+        this->append_test_values(v);
+        EXPECT_EQ(v.at(0), this->test_values().at(0));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, at_out_of_range)
+{
+    TypeParam v;
+    EXPECT_THROW(v.at(0), std::out_of_range);
+}
+
+TYPED_TEST(InplaceVectorTest, index_in_range)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v;
+        this->append_test_values(v);
+        EXPECT_EQ(v[0], this->test_values().at(0));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, front)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v;
+        this->append_test_values(v);
+        EXPECT_EQ(v.front(), this->test_values().front());
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, back)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v;
+        this->append_test_values(v);
+        EXPECT_EQ(v.back(), this->test_values().back());
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, empty)
 {
     TypeParam v1;

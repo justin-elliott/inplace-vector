@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <format>
 #include <iterator>
 #include <memory>
 #include <ranges>
@@ -418,31 +419,42 @@ public:
         assign(init.begin(), init.end());
     }
 
-    constexpr reference operator[](size_type pos)
+    constexpr reference at(size_type pos)
     {
-        return *(data() + pos);
-    }
-    
-    constexpr const_reference operator[](size_type pos) const
-    {
+        range_check(pos);
         return *(data() + pos);
     }
 
-    constexpr pointer data() noexcept { return storage_.data(); }
-    constexpr const_pointer data() const noexcept { return storage_.data(); }
+    constexpr const_reference at(size_type pos) const
+    {
+        range_check(pos);
+        return *(data() + pos);
+    }
+
+    constexpr reference        operator[](size_type pos)       { return *(data() + pos); }
+    constexpr const_reference  operator[](size_type pos) const { return *(data() + pos); }
+
+    constexpr reference        front()                   { return *data(); }
+    constexpr const_reference  front()    const          { return *data(); }
+
+    constexpr reference        back()                    { return *(data() + size() - 1); }
+    constexpr const_reference  back()     const          { return *(data() + size() - 1); }
+
+    constexpr pointer          data()     noexcept       { return storage_.data(); }
+    constexpr const_pointer    data()     const noexcept { return storage_.data(); }
     
-    constexpr iterator begin() noexcept { return iterator{data(), data(), size()}; }
-    constexpr const_iterator begin() const noexcept { return const_iterator{data(), data(), size()}; }
-    constexpr const_iterator cbegin() const noexcept { return begin(); }
+    constexpr iterator         begin()    noexcept       { return iterator{data(), data(), size()}; }
+    constexpr const_iterator   begin()    const noexcept { return const_iterator{data(), data(), size()}; }
+    constexpr const_iterator   cbegin()   const noexcept { return begin(); }
 
-    constexpr iterator end() noexcept { return iterator{data() + size(), data(), size()}; }
-    constexpr const_iterator end() const noexcept { return const_iterator{data() + size(), data(), size()}; }
-    constexpr const_iterator cend() const noexcept { return end(); }
+    constexpr iterator         end()      noexcept       { return iterator{data() + size(), data(), size()}; }
+    constexpr const_iterator   end()      const noexcept { return const_iterator{data() + size(), data(), size()}; }
+    constexpr const_iterator   cend()     const noexcept { return end(); }
 
-    constexpr bool empty() const noexcept { return size() == 0; }
-    constexpr size_type size() const noexcept { return storage_.size(); }
-    static constexpr size_type max_size() noexcept { return N; }
-    static constexpr size_type capacity() noexcept { return N; }
+    constexpr bool             empty()    const noexcept { return size() == 0; }
+    constexpr size_type        size()     const noexcept { return storage_.size(); }
+    static constexpr size_type max_size() noexcept       { return N; }
+    static constexpr size_type capacity() noexcept       { return N; }
 
     void resize(size_type count)
     {
@@ -499,6 +511,14 @@ public:
     }
 
 private:
+    constexpr void range_check(std::size_t pos) const
+    {
+        if (pos >= size())
+        {
+            throw std::out_of_range{std::format("pos >= size() [{} >= {}]", pos, size())};
+        }
+    }
+
     [[no_unique_address]] inplace_vector_detail::storage<T, N> storage_;
 };
 
