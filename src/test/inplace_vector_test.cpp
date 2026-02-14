@@ -1,9 +1,5 @@
 #include "inplace_vector.hpp"
 
-#include <array>
-#include <limits>
-#include <numeric>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -33,18 +29,6 @@ static_assert(sizeof(ZeroVector) == ZeroVector_expected_size);
 
 namespace {
 
-constexpr auto at_end = std::numeric_limits<std::size_t>::max();
-
-constexpr auto move_begin(auto& container)
-{
-    return std::make_move_iterator(container.begin());
-}
-
-constexpr auto move_end(auto& container, std::size_t n = at_end)
-{
-    return std::make_move_iterator((n == at_end) ? container.end() : container.begin() + n);
-}
-
 template <typename T>
 class InplaceVectorTest : public testing::Test
 {
@@ -53,27 +37,19 @@ private:
     using const_vector = const T;
     using value_type = vector::value_type;
 
-    template <std::size_t N, int... Is>
-    static constexpr std::array<value_type, N> values_impl(int first, std::integer_sequence<int, Is...>)
+    static constexpr vector values(std::size_t first, std::size_t count = vector::capacity())
     {
-        return {value_type{Is + first}...};
-    }
-
-    template <std::size_t N>
-    static constexpr std::array<value_type, N> values(int first)
-    {
-        return values_impl<N>(first, std::make_integer_sequence<int, N>{});
+        return std::views::iota(first, first + count)
+             | std::views::transform([](std::size_t i) { return value_type{i}; })
+             | std::ranges::to<vector>();
     }
 
 protected:
-    static constexpr inline auto full = vector::capacity();
-    static constexpr inline auto half = full / 2;
-
     constexpr InplaceVectorTest()
-        : cv_     (std::from_range, values<full>(100) | std::views::as_rvalue)
-        , v_      (std::from_range, values<full>(100) | std::views::as_rvalue)
-        , cv_half_(std::from_range, values<half>(200) | std::views::as_rvalue)
-        , v_half_ (std::from_range, values<half>(200) | std::views::as_rvalue)
+        : cv_     (values(100))
+        , v_      (values(100))
+        , cv_half_(values(200, vector::capacity() / 2))
+        , v_half_ (values(200, vector::capacity() / 2))
     {
     }
 
@@ -86,7 +62,7 @@ protected:
 class NonTrivial
 {
 public:
-    constexpr NonTrivial(int value = 0) : value_{value} {}
+    constexpr NonTrivial(std::size_t value = 0) : value_{value} {}
 
     constexpr NonTrivial(const NonTrivial& other) { value_ = other.value_; }
     constexpr NonTrivial(NonTrivial&& other) { value_ = other.value_; }
@@ -94,22 +70,19 @@ public:
     constexpr NonTrivial& operator=(const NonTrivial& other) { value_ = other.value_; return *this; }
     constexpr NonTrivial& operator=(NonTrivial&& other) { value_ = other.value_; return *this; }
 
-    constexpr ~NonTrivial() { value_ = -1; }
+    constexpr ~NonTrivial() { value_ = 0; }
 
-    constexpr friend bool operator==(const NonTrivial& lhs, const NonTrivial& rhs)
-    {
-        return lhs.value_ == rhs.value_;
-    }
+    constexpr friend bool operator==(const NonTrivial&, const NonTrivial&) = default;
 
 private:
-    int value_;
+    std::size_t value_;
 };
 
 class MoveOnly
 {
 public:
     constexpr MoveOnly() = default;
-    constexpr explicit MoveOnly(int value) : value_{value} {}
+    constexpr explicit MoveOnly(std::size_t value) : value_{value} {}
 
     constexpr MoveOnly(const MoveOnly&) = delete;
     constexpr MoveOnly& operator=(const MoveOnly&) = delete;
@@ -119,19 +92,16 @@ public:
 
     constexpr ~MoveOnly() = default;
 
-    constexpr friend bool operator==(const MoveOnly& lhs, const MoveOnly& rhs)
-    {
-        return lhs.value_ == rhs.value_;
-    }
+    constexpr friend bool operator==(const MoveOnly&, const MoveOnly&) = default;
 
 private:
-    int value_{0};
+    std::size_t value_{0};
 };
 
 class ThrowOnCopyOrMoveCounter
 {
 public:
-    explicit ThrowOnCopyOrMoveCounter(int counter) : counter_{counter} {}
+    explicit ThrowOnCopyOrMoveCounter(std::size_t counter) : counter_{counter} {}
 
     ThrowOnCopyOrMoveCounter(const ThrowOnCopyOrMoveCounter& other) : counter_{other.counter_}
     {
@@ -167,13 +137,15 @@ public:
 
     ~ThrowOnCopyOrMoveCounter() = default;
 
+    constexpr friend bool operator==(const ThrowOnCopyOrMoveCounter&, const ThrowOnCopyOrMoveCounter&) = default;
+
 private:
-    int counter_;
+    std::size_t counter_;
 };
 
 using vector_types = testing::Types<
-    jell::inplace_vector<int, 0>,
-    jell::inplace_vector<int, 23>,
+    jell::inplace_vector<std::size_t, 0>,
+    jell::inplace_vector<std::size_t, 23>,
     jell::inplace_vector<NonTrivial, 29>,
     jell::inplace_vector<MoveOnly, 31>
 >;
@@ -223,7 +195,8 @@ TYPED_TEST(InplaceVectorTest, size_value_constructor_overflow)
 
 TYPED_TEST(InplaceVectorTest, is_iterator_constructible)
 {
-    const TypeParam v(move_begin(this->v_), move_end(this->v_));
+    const TypeParam v(std::make_move_iterator(this->v_.begin()),
+                      std::make_move_iterator(this->v_.end()));
     EXPECT_EQ(v, this->cv_);
 }
 
@@ -355,7 +328,8 @@ TYPED_TEST(InplaceVectorTest, can_assign_count_values)
 TYPED_TEST(InplaceVectorTest, can_assign_iterator)
 {
     TypeParam v;
-    v.assign(move_begin(this->v_), move_end(this->v_));
+    v.assign(std::make_move_iterator(this->v_.begin()),
+             std::make_move_iterator(this->v_.end()));
     EXPECT_EQ(v, this->cv_);
 }
 

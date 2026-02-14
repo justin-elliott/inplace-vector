@@ -382,8 +382,12 @@ public:
 
     template <inplace_vector_detail::container_compatible_range<T> R>
     constexpr inplace_vector(std::from_range_t, R&& rg)
-        : inplace_vector(std::ranges::begin(rg), std::ranges::end(rg))
     {
+        inplace_vector_detail::exception_guard guard{this};
+        for (auto&& value : rg) {
+            emplace_back(std::forward<decltype(value)>(value));
+        }
+        guard.release();
     }
 
     constexpr inplace_vector(const inplace_vector& other) = default;
@@ -422,7 +426,9 @@ public:
     template <inplace_vector_detail::container_compatible_range<T> R>
     constexpr void assign_range(R&& rg)
     {
-        assign(std::begin(rg), std::end(rg));
+        for (auto&& value : rg) {
+            emplace_back(std::forward<decltype(value)>(value));
+        }
     }
 
     constexpr reference at(size_type pos)
