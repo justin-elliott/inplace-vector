@@ -375,9 +375,7 @@ public:
     constexpr inplace_vector(InputIt first, InputIt last)
     {
         inplace_vector_detail::exception_guard guard{this};
-        for (; first != last; ++first) {
-            emplace_back(*first);
-        }
+        assign(std::move(first), std::move(last));
         guard.release();
     }
 
@@ -405,6 +403,19 @@ public:
     constexpr void assign(size_type count, const value_type& value)
     {
         resize(size() + count, value);
+    }
+
+    template <typename InputIt>
+    constexpr void assign(InputIt first, InputIt last)
+    {
+        for (; first != last; ++first) {
+            emplace_back(*first);
+        }
+    }
+
+    constexpr void assign(std::initializer_list<value_type> init)
+    {
+        assign(init.begin(), init.end());
     }
 
     constexpr reference operator[](size_type pos)

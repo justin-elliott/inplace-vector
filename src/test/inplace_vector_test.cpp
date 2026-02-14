@@ -360,6 +360,29 @@ TYPED_TEST(InplaceVectorTest, can_assign_count_values)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, can_assign_iterator)
+{
+    if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const auto values = this->test_values();
+
+        TypeParam v;
+        v.assign(values.begin(), values.end());
+        EXPECT_THAT(v, ElementsAreArray(values));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_assign_initializer_list)
+{
+    using value_type = typename TypeParam::value_type;
+    if constexpr (std::is_copy_constructible_v<value_type>) {
+        if constexpr (TypeParam::capacity() >= 3) {
+            TypeParam v;
+            v.assign({value_type{}, value_type{}, value_type{}});
+            EXPECT_EQ(v.size(), 3);
+        }
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, empty)
 {
     TypeParam v1;
