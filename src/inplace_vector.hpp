@@ -382,7 +382,7 @@ public:
 
     template <inplace_vector_detail::container_compatible_range<T> R>
     constexpr inplace_vector(std::from_range_t, R&& rg)
-        : inplace_vector(std::begin(rg), std::end(rg))
+        : inplace_vector(std::ranges::begin(rg), std::ranges::end(rg))
     {
     }
 
