@@ -45,42 +45,42 @@ constexpr auto move_end(auto& container, std::size_t n = at_end)
     return std::make_move_iterator((n == at_end) ? container.end() : container.begin() + n);
 }
 
-template <typename T, typename IntegerSequence = std::make_integer_sequence<int, T::capacity()>>
-struct vectors;
-
-template <typename T, int... Is>
-class vectors<T, std::integer_sequence<int, Is...>>
+template <typename T>
+class InplaceVectorTest : public testing::Test
 {
 private:
-    using mutable_vector = T;
+    using vector = T;
     using const_vector = const T;
-    using value_type = mutable_vector::value_type;
+    using value_type = vector::value_type;
 
-    static constexpr inline auto capacity = mutable_vector::capacity();
+    template <std::size_t N, int... Is>
+    static constexpr std::array<value_type, N> values_impl(int first, std::integer_sequence<int, Is...>)
+    {
+        return {value_type{Is + first}...};
+    }
 
-    std::array<value_type, capacity> a_full    {value_type{Is + 100}...};
-    std::array<value_type, capacity> a_full_mut{value_type{Is + 100}...};
-    std::array<value_type, capacity> a_half    {value_type{Is + 200}...};
-    std::array<value_type, capacity> a_half_mut{value_type{Is + 200}...};
+    template <std::size_t N>
+    static constexpr std::array<value_type, N> values(int first)
+    {
+        return values_impl<N>(first, std::make_integer_sequence<int, N>{});
+    }
 
-public:
-    constexpr vectors()
-        : v_full    (move_begin(a_full),     move_end(a_full))
-        , v_full_mut(move_begin(a_full_mut), move_end(a_full_mut))
-        , v_half    (move_begin(a_half),     move_end(a_half,     capacity / 2))
-        , v_half_mut(move_begin(a_half_mut), move_end(a_half_mut, capacity / 2))
+protected:
+    static constexpr inline auto full = vector::capacity();
+    static constexpr inline auto half = full / 2;
+
+    constexpr InplaceVectorTest()
+        : cv_     (std::from_range, values<full>(100) | std::views::as_rvalue)
+        , v_      (std::from_range, values<full>(100) | std::views::as_rvalue)
+        , cv_half_(std::from_range, values<half>(200) | std::views::as_rvalue)
+        , v_half_ (std::from_range, values<half>(200) | std::views::as_rvalue)
     {
     }
 
-    const_vector   v_full;
-    mutable_vector v_full_mut;
-    const_vector   v_half;
-    mutable_vector v_half_mut;
-};
-
-template <typename T>
-class InplaceVectorTest : public testing::Test, public vectors<T>
-{
+    const_vector cv_;
+    vector       v_;
+    const_vector cv_half_;
+    vector       v_half_;
 };
 
 class NonTrivial
@@ -172,10 +172,10 @@ private:
 };
 
 using vector_types = testing::Types<
-    jell::inplace_vector<int, 32>,
     jell::inplace_vector<int, 0>,
-    jell::inplace_vector<NonTrivial, 24>,
-    jell::inplace_vector<MoveOnly, 16>
+    jell::inplace_vector<int, 23>,
+    jell::inplace_vector<NonTrivial, 29>,
+    jell::inplace_vector<MoveOnly, 31>
 >;
 TYPED_TEST_SUITE(InplaceVectorTest, vector_types);
 
@@ -223,21 +223,21 @@ TYPED_TEST(InplaceVectorTest, size_value_constructor_overflow)
 
 TYPED_TEST(InplaceVectorTest, is_iterator_constructible)
 {
-    const TypeParam v(move_begin(this->v_full_mut), move_end(this->v_full_mut));
-    EXPECT_EQ(v, this->v_full);
+    const TypeParam v(move_begin(this->v_), move_end(this->v_));
+    EXPECT_EQ(v, this->cv_);
 }
 
 TYPED_TEST(InplaceVectorTest, is_range_constructible)
 {
-    TypeParam v(std::from_range, this->v_full_mut | std::views::as_rvalue);
-    EXPECT_EQ(v, this->v_full);
+    TypeParam v(std::from_range, this->v_ | std::views::as_rvalue);
+    EXPECT_EQ(v, this->cv_);
 }
 
 TYPED_TEST(InplaceVectorTest, is_copy_constructible)
 {
     if constexpr (std::is_copy_constructible_v<typename TypeParam::value_type>) {
-        TypeParam v(this->v_full);
-        EXPECT_EQ(v, this->v_full);
+        TypeParam v(this->cv_);
+        EXPECT_EQ(v, this->cv_);
     }
 }
 
@@ -265,8 +265,8 @@ TEST(InplaceVectorTest, handles_throw_in_move_constructor)
 
 TYPED_TEST(InplaceVectorTest, is_move_constructible)
 {
-    const TypeParam v(std::move(this->v_full_mut));
-    EXPECT_EQ(v, this->v_full);
+    const TypeParam v(std::move(this->v_));
+    EXPECT_EQ(v, this->cv_);
 }
 
 TYPED_TEST(InplaceVectorTest, is_initializer_list_constructible)
@@ -274,7 +274,7 @@ TYPED_TEST(InplaceVectorTest, is_initializer_list_constructible)
     using value_type = typename TypeParam::value_type;
     if constexpr (std::is_copy_constructible_v<value_type>) {
         if constexpr (TypeParam::capacity() >= 3) {
-            TypeParam v{value_type{}, value_type{}, value_type{}};
+            TypeParam v{this->cv_[0], this->cv_[1], this->cv_[2]};
             EXPECT_EQ(v.size(), 3);
         }
     }
@@ -284,26 +284,26 @@ TYPED_TEST(InplaceVectorTest, is_assignable_initially_empty)
 {
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
         TypeParam v;
-        v = this->v_full;
-        EXPECT_EQ(v, this->v_full);
+        v = this->cv_;
+        EXPECT_EQ(v, this->cv_);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, is_assignable_initially_nonempty_and_smaller)
 {
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
-        TypeParam v(std::from_range, this->v_half);
-        v = this->v_full;
-        EXPECT_EQ(v, this->v_full);
+        TypeParam v(std::from_range, this->cv_half_);
+        v = this->cv_;
+        EXPECT_EQ(v, this->cv_);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, is_assignable_initially_nonempty_and_larger)
 {
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
-        TypeParam v(std::from_range, this->v_full);
-        v = this->v_half;
-        EXPECT_EQ(v, this->v_half);
+        TypeParam v(std::from_range, this->cv_);
+        v = this->cv_half_;
+        EXPECT_EQ(v, this->cv_half_);
     }
 }
 
@@ -311,26 +311,26 @@ TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_empty)
 {
     if constexpr (std::is_move_assignable_v<typename TypeParam::value_type>) {
         TypeParam v;
-        v = std::move(this->v_full_mut);
-        EXPECT_EQ(v, this->v_full);
+        v = std::move(this->v_);
+        EXPECT_EQ(v, this->cv_);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_nonempty_and_smaller)
 {
     if constexpr (std::is_move_assignable_v<typename TypeParam::value_type>) {
-        TypeParam v(std::from_range, this->v_half_mut | std::views::as_rvalue);
-        v = std::move(this->v_full_mut);
-        EXPECT_EQ(v, this->v_full);
+        TypeParam v(std::from_range, this->v_half_ | std::views::as_rvalue);
+        v = std::move(this->v_);
+        EXPECT_EQ(v, this->cv_);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_nonempty_and_larger)
 {
     if constexpr (std::is_move_assignable_v<typename TypeParam::value_type>) {
-        TypeParam v(std::from_range, this->v_full_mut | std::views::as_rvalue);
-        v = std::move(this->v_half_mut);
-        EXPECT_EQ(v, this->v_half);
+        TypeParam v(std::from_range, this->v_ | std::views::as_rvalue);
+        v = std::move(this->v_half_);
+        EXPECT_EQ(v, this->cv_half_);
     }
 }
 
@@ -355,8 +355,8 @@ TYPED_TEST(InplaceVectorTest, can_assign_count_values)
 TYPED_TEST(InplaceVectorTest, can_assign_iterator)
 {
     TypeParam v;
-    v.assign(move_begin(this->v_full_mut), move_end(this->v_full_mut));
-    EXPECT_EQ(v, this->v_full);
+    v.assign(move_begin(this->v_), move_end(this->v_));
+    EXPECT_EQ(v, this->cv_);
 }
 
 TYPED_TEST(InplaceVectorTest, can_assign_initializer_list)
@@ -365,7 +365,7 @@ TYPED_TEST(InplaceVectorTest, can_assign_initializer_list)
     if constexpr (std::is_copy_constructible_v<value_type>) {
         if constexpr (TypeParam::capacity() >= 3) {
             TypeParam v;
-            v.assign({value_type{}, value_type{}, value_type{}});
+            v.assign({this->cv_[0], this->cv_[1], this->cv_[2]});
             EXPECT_EQ(v.size(), 3);
         }
     }
@@ -374,46 +374,46 @@ TYPED_TEST(InplaceVectorTest, can_assign_initializer_list)
 TYPED_TEST(InplaceVectorTest, can_assign_range)
 {
     TypeParam v;
-    v.assign_range(this->v_full_mut | std::views::as_rvalue);
-    EXPECT_EQ(v, this->v_full);
+    v.assign_range(this->v_ | std::views::as_rvalue);
+    EXPECT_EQ(v, this->cv_);
 }
 
 TYPED_TEST(InplaceVectorTest, at_in_range)
 {
     if constexpr (TypeParam::capacity() != 0) {
-        EXPECT_NO_THROW(this->v_full.at(0));
-        EXPECT_NO_THROW(this->v_full_mut.at(0));
+        EXPECT_NO_THROW(this->cv_.at(0));
+        EXPECT_NO_THROW(this->v_.at(0));
     }
 }
 
 TYPED_TEST(InplaceVectorTest, at_out_of_range)
 {
     TypeParam v;
-    EXPECT_THROW(this->v_full.at(this->v_full.size()), std::out_of_range);
-    EXPECT_THROW(this->v_full_mut.at(this->v_full.size()), std::out_of_range);
+    EXPECT_THROW(this->cv_.at(this->cv_.size()), std::out_of_range);
+    EXPECT_THROW(this->v_.at(this->cv_.size()), std::out_of_range);
 }
 
 TYPED_TEST(InplaceVectorTest, index_in_range)
 {
     if constexpr (TypeParam::capacity() != 0) {
-        EXPECT_NO_THROW(this->v_full[0]);
-        EXPECT_NO_THROW(this->v_full_mut[0]);
+        EXPECT_NO_THROW(this->cv_[0]);
+        EXPECT_NO_THROW(this->v_[0]);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, front)
 {
     if constexpr (TypeParam::capacity() != 0) {
-        EXPECT_EQ(this->v_full.front(), this->v_full[0]);
-        EXPECT_EQ(this->v_full_mut.front(), this->v_full_mut[0]);
+        EXPECT_EQ(this->cv_.front(), this->cv_[0]);
+        EXPECT_EQ(this->v_.front(), this->v_[0]);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, back)
 {
     if constexpr (TypeParam::capacity() != 0) {
-        EXPECT_EQ(this->v_full.back(), this->v_full[this->v_full.size() - 1]);
-        EXPECT_EQ(this->v_full_mut.back(), this->v_full_mut[this->v_full_mut.size() - 1]);
+        EXPECT_EQ(this->cv_.back(), this->cv_[this->cv_.size() - 1]);
+        EXPECT_EQ(this->v_.back(), this->v_[this->v_.size() - 1]);
     }
 }
 
@@ -426,7 +426,7 @@ TYPED_TEST(InplaceVectorTest, empty)
 TYPED_TEST(InplaceVectorTest, nonempty)
 {
     if constexpr (TypeParam::capacity() != 0) {
-        EXPECT_FALSE(this->v_full.empty());
+        EXPECT_FALSE(this->cv_.empty());
     }
 }
 
@@ -439,18 +439,18 @@ TYPED_TEST(InplaceVectorTest, size_empty)
 TYPED_TEST(InplaceVectorTest, size_nonempty)
 {
     if constexpr (TypeParam::capacity() != 0) {
-        EXPECT_GT(this->v_half.size(), 0);
+        EXPECT_GT(this->cv_half_.size(), 0);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, max_size)
 {
-    EXPECT_LE(this->v_half.size(), this->v_half.max_size());
+    EXPECT_LE(this->cv_half_.size(), this->cv_half_.max_size());
 }
 
 TYPED_TEST(InplaceVectorTest, capacity)
 {
-    EXPECT_LE(this->v_half.size(), this->v_half.capacity());
+    EXPECT_LE(this->cv_half_.size(), this->cv_half_.capacity());
 }
 
 TYPED_TEST(InplaceVectorTest, can_resize_smaller)
@@ -508,7 +508,7 @@ TYPED_TEST(InplaceVectorTest, reserve_above_capacity)
 
 TYPED_TEST(InplaceVectorTest, shrink_to_fit)
 {
-    EXPECT_NO_THROW(this->v_half_mut.shrink_to_fit());
+    EXPECT_NO_THROW(this->v_half_.shrink_to_fit());
 }
 
 TYPED_TEST(InplaceVectorTest, can_emplace_back)
@@ -521,21 +521,21 @@ TYPED_TEST(InplaceVectorTest, can_emplace_back)
 
 TYPED_TEST(InplaceVectorTest, handles_emplace_back_overflow)
 {
-    EXPECT_THROW(this->v_full_mut.emplace_back(typename TypeParam::value_type{999}), std::bad_alloc);
+    EXPECT_THROW(this->v_.emplace_back(typename TypeParam::value_type{999}), std::bad_alloc);
 }
 
 TYPED_TEST(InplaceVectorTest, can_pop_back)
 {
     if constexpr (TypeParam::capacity() != 0) {
-        this->v_full_mut.pop_back();
-        EXPECT_EQ(this->v_full_mut.size(), this->v_full.size() - 1);
+        this->v_.pop_back();
+        EXPECT_EQ(this->v_.size(), this->cv_.size() - 1);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, can_clear)
 {
-    this->v_full_mut.clear();
-    EXPECT_EQ(this->v_full_mut.size(), 0);
+    this->v_.clear();
+    EXPECT_EQ(this->v_.size(), 0);
 }
 
 TYPED_TEST(InplaceVectorTest, can_compare_iterators)
@@ -556,7 +556,7 @@ TYPED_TEST(InplaceVectorTest, can_compare_iterators)
 TYPED_TEST(InplaceVectorTest, can_dereference_iterators)
 {
     if constexpr (TypeParam::capacity() != 0) {
-        TypeParam& v = this->v_full_mut;
+        TypeParam& v = this->v_;
 
         EXPECT_EQ(*v.begin(), v[0]);
         EXPECT_EQ(*v.cbegin(), v[0]);
@@ -571,7 +571,7 @@ TYPED_TEST(InplaceVectorTest, can_dereference_iterators)
 TYPED_TEST(InplaceVectorTest, cant_increment_iterators_past_end)
 {
 #if defined(CHECKED_ITERATORS)
-    TypeParam& v = this->v_full_mut;
+    TypeParam& v = this->v_;
     EXPECT_THROW(++v.end(), std::range_error);
     EXPECT_THROW(++v.cend(), std::range_error);
 #endif
@@ -580,7 +580,7 @@ TYPED_TEST(InplaceVectorTest, cant_increment_iterators_past_end)
 TYPED_TEST(InplaceVectorTest, can_use_addition_on_iterators)
 {
     if constexpr (TypeParam::capacity() > 2) {
-        TypeParam& v = this->v_full_mut;
+        TypeParam& v = this->v_;
 
         EXPECT_EQ(*(v.begin() + 2), v[2]);
         EXPECT_EQ(*(v.cbegin() + 2), v[2]);
@@ -598,7 +598,7 @@ TYPED_TEST(InplaceVectorTest, can_use_addition_on_iterators)
 TYPED_TEST(InplaceVectorTest, can_use_subtraction_on_iterators)
 {
     if constexpr (TypeParam::capacity() > 2) {
-        TypeParam& v = this->v_full_mut;
+        TypeParam& v = this->v_;
 
         EXPECT_EQ(*(v.end() - 2), v[v.size() - 2]);
         EXPECT_EQ(*(v.cend() - 2), v[v.size() - 2]);
