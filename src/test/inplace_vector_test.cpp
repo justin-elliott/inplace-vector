@@ -24,7 +24,15 @@ struct ZeroVector
     int non_empty;
     [[no_unique_address]] jell::inplace_vector<int, 0> empty;
 };
-static_assert(sizeof(ZeroVector) == sizeof(ZeroVector::non_empty));
+
+#if defined(__INTELLISENSE__)
+// 2026-02-14: [[no_unique_address]] is not supported
+const auto ZeroVector_expected_size = sizeof(ZeroVector);
+#else
+const auto ZeroVector_expected_size = sizeof(ZeroVector::non_empty);
+#endif // __INTELLISENSE__
+
+static_assert(sizeof(ZeroVector) == ZeroVector_expected_size);
 
 namespace {
 
