@@ -24,8 +24,9 @@ concept container_compatible_range =
     std::convertible_to<std::ranges::range_reference_t<R>, T>;
 
 template <typename T>
-struct exception_guard
+class exception_guard
 {
+public:
     constexpr explicit exception_guard(T* guarded) : guarded_{guarded} {}
     constexpr ~exception_guard()
     {
@@ -35,12 +36,16 @@ struct exception_guard
     }
     constexpr void release() noexcept { guarded_ = nullptr; }
 
+private:
     T* guarded_;
 };
 
 template <typename T, std::size_t N>
-struct storage
+class storage
 {
+public:
+    using size_type = std::size_t;
+
     constexpr storage() noexcept = default;
 
     constexpr storage(const storage&) noexcept requires std::is_trivially_copy_constructible_v<T> = default;
@@ -76,7 +81,7 @@ struct storage
             destroy(other.size_, size_);
             size_ = other.size_;
         }
-        for (std::size_t i = 0; i != size_; ++i) {
+        for (size_type i = 0; i != size_; ++i) {
             data()[i] = other.data()[i];
         }
         for (; size_ < other.size_; ++size_) {
@@ -92,7 +97,7 @@ struct storage
             destroy(other.size_, size_);
             size_ = other.size_;
         }
-        for (std::size_t i = 0; i != size_; ++i) {
+        for (size_type i = 0; i != size_; ++i) {
             data()[i] = std::move(other.data()[i]);
         }
         for (; size_ < other.size_; ++size_) {
@@ -104,23 +109,23 @@ struct storage
 
     [[nodiscard]] constexpr T*          data()       noexcept { return reinterpret_cast<T*>(data_); }
     [[nodiscard]] constexpr const T*    data() const noexcept { return reinterpret_cast<const T*>(data_); }
-    [[nodiscard]] constexpr std::size_t size() const          { return size_; }
-                  constexpr void        size(std::size_t n)   { size_ = n; }
+    [[nodiscard]] constexpr size_type   size() const          { return size_; }
+                  constexpr void        size(size_type n)     { size_ = n; }
 
     template <typename... Args>
-    constexpr T* construct_at(std::size_t i, Args&&... args)
+    constexpr T* construct_at(size_type i, Args&&... args)
     {
         return std::ranges::construct_at(data() + i, std::forward<Args>(args)...);
     }
 
-    constexpr void destroy_at(std::size_t)   noexcept requires std::is_trivially_destructible_v<T> {}
-    constexpr void destroy_at(std::size_t i) noexcept
+    constexpr void destroy_at(size_type)   noexcept requires std::is_trivially_destructible_v<T> {}
+    constexpr void destroy_at(size_type i) noexcept
     {
         std::ranges::destroy_at(data() + i);
     }
     
-    constexpr void destroy(std::size_t, std::size_t) noexcept requires std::is_trivially_destructible_v<T> {}
-    constexpr void destroy(std::size_t first, std::size_t last) noexcept
+    constexpr void destroy(size_type, size_type) noexcept requires std::is_trivially_destructible_v<T> {}
+    constexpr void destroy(size_type first, size_type last) noexcept
     {
         std::ranges::destroy(data() + first, data() + last);
     }
@@ -131,23 +136,26 @@ struct storage
         size_ = 0;
     }
 
+private:
     alignas(T) std::byte data_[N * sizeof(T)];
-    std::size_t size_{0};
+    size_type size_{0};
 };
 
 template <typename T>
 struct storage<T, 0>
 {
+    using size_type = std::size_t;
+
     [[nodiscard]] constexpr T*          data()       noexcept { return nullptr; }
     [[nodiscard]] constexpr const T*    data() const noexcept { return nullptr; }
-    [[nodiscard]] constexpr std::size_t size() const          { return 0; }
-                  constexpr void        size(std::size_t)     {}
+    [[nodiscard]] constexpr size_type   size() const          { return 0; }
+                  constexpr void        size(size_type)       {}
 
     template <typename... Args>
-    constexpr T* construct_at(std::size_t, Args&&...) noexcept { return nullptr; }
+    constexpr T* construct_at(size_type, Args&&...) noexcept { return nullptr; }
 
-    constexpr void destroy_at(std::size_t) noexcept {}
-    constexpr void destroy(std::size_t, std::size_t) noexcept {}
+    constexpr void destroy_at(size_type) noexcept {}
+    constexpr void destroy(size_type, size_type) noexcept {}
     constexpr void clear() noexcept {}
 };
 
@@ -163,6 +171,7 @@ public:
     friend class ::jell::inplace_vector;
 
     using iterator_traits   = std::iterator_traits<T*>;
+    using size_type         = std::size_t;
     using difference_type   = iterator_traits::difference_type;
     using value_type        = iterator_traits::value_type;
     using pointer           = iterator_traits::pointer;
@@ -197,27 +206,27 @@ public:
 
     constexpr reference operator*() const
     {
-        check_range_for_deref(pos_, "*iterator is out of range");
+        deref_check(pos_, "Dereferenced iterator (*) is out of range");
         return *pos_;
     }
 
     constexpr pointer operator->() const
     {
         // std::to_address() requires that operator-> be defined for the end-of-range.
-        check_range_for_update(pos_, "iterator-> is out of range");
+        range_check(pos_, "Dereferenced iterator (->) is out of range");
         return pos_;
     }
 
     constexpr reference operator[](difference_type n) const
     {
         const auto pos{pos_ + n};
-        check_range_for_update(pos, "iterator[] is out of range");
+        range_check(pos, "Indexed iterator ([]) is out of range");
         return *pos;
     }
     
     constexpr iterator& operator++()
     {
-        check_range_for_update(pos_ + 1, "++iterator beyond the end of range");
+        range_check(pos_ + 1, "Incremented iterator (++) is out of range");
         ++pos_;
         return *this;
     }
@@ -231,7 +240,7 @@ public:
 
     constexpr iterator& operator--()
     {
-        check_range_for_update(pos_ - 1, "--iterator below the start of range");
+        range_check(pos_ - 1, "Decremented iterator (--) is out of range");
         --pos_;
         return *this;
     }
@@ -246,7 +255,7 @@ public:
     constexpr iterator& operator+=(difference_type n)
     {
         const auto pos{pos_ + n};
-        check_range_for_update(pos, "iterator+= is out of range");
+        range_check(pos, "Computed iterator (+=/-=/+/-) is out of range");
         pos_ = pos;
         return *this;
     }
@@ -294,7 +303,7 @@ public:
     }
 
 private:
-    constexpr void check_range_for_deref([[maybe_unused]] pointer pos, [[maybe_unused]] const char* message) const
+    constexpr void deref_check([[maybe_unused]] pointer pos, [[maybe_unused]] const char* message) const
     {
 #if defined(CHECKED_ITERATORS)
         if (pos < first_ || pos >= last_) {
@@ -303,7 +312,7 @@ private:
 #endif
     }
 
-    constexpr void check_range_for_update([[maybe_unused]] pointer pos, [[maybe_unused]] const char* message) const
+    constexpr void range_check([[maybe_unused]] pointer pos, [[maybe_unused]] const char* message) const
     {
 #if defined(CHECKED_ITERATORS)
         if (pos < first_ || pos > last_) {
@@ -312,7 +321,7 @@ private:
 #endif
     }
 
-    constexpr iterator(pointer p, [[maybe_unused]] pointer base, [[maybe_unused]] std::size_t size) noexcept
+    constexpr iterator(pointer p, [[maybe_unused]] pointer base, [[maybe_unused]] size_type size) noexcept
         : pos_{p}
 #if defined(CHECKED_ITERATORS)
         , first_{base}
@@ -350,9 +359,7 @@ public:
 
     constexpr explicit inplace_vector(size_type count)
     {
-        if (count > capacity()) {
-            throw std::bad_alloc{};
-        }
+        capacity_check(count);
         inplace_vector_detail::exception_guard guard{this};
         while (count--) {
             emplace_back();
@@ -362,9 +369,7 @@ public:
 
     constexpr inplace_vector(size_type count, const value_type& value)
     {
-        if (count > capacity()) {
-            throw std::bad_alloc{};
-        }
+        capacity_check(count);
         inplace_vector_detail::exception_guard guard{this};
         while (count--) {
             emplace_back(value);
@@ -372,7 +377,7 @@ public:
         guard.release();
     }
 
-    template <typename InputIt>
+    template <std::input_iterator InputIt>
     constexpr inplace_vector(InputIt first, InputIt last)
     {
         inplace_vector_detail::exception_guard guard{this};
@@ -410,7 +415,7 @@ public:
         resize(size() + count, value);
     }
 
-    template <typename InputIt>
+    template <std::input_iterator InputIt>
     constexpr void assign(InputIt first, InputIt last)
     {
         for (; first != last; ++first) {
@@ -490,53 +495,49 @@ public:
         }
     }
 
-    static constexpr void reserve(std::size_t new_capacity)
+    static constexpr void reserve(size_type new_capacity)
     {
-        if (new_capacity > capacity()) {
-            throw std::bad_alloc{};
-        }
+        capacity_check(new_capacity);
     }
 
     static constexpr void shrink_to_fit() noexcept {}
 
     constexpr iterator insert(const_iterator pos, const value_type& value)
     {
-        const auto it = begin() + (pos - begin());
-        if (it == end()) {
-            emplace_back(value);
-        } else {
-            auto last = end() - 1;
-            emplace_back(std::move(*last));
-            for (; last != it; --last) {
-                *last = std::move(*(last - 1));
-            }
-            *it = value;
-        }
-        return it;
+        capacity_check(size() + 1);
+        attic attic{*this, size() + 1};
+        attic.store(pos);
+        emplace_back(value);
+        attic.retrieve(end());
+        return remove_const(pos);
     }
 
     constexpr iterator insert(const_iterator pos, value_type&& value)
     {
-        const auto it = begin() + (pos - begin());
-        if (it == end()) {
-            emplace_back(std::move(value));
-        } else {
-            auto last = end() - 1;
-            emplace_back(std::move(*last));
-            for (; last != it; --last) {
-                *last = std::move(*(last - 1));
-            }
-            *it = std::move(value);
+        capacity_check(size() + 1);
+        attic attic{*this, size() + 1};
+        attic.store(pos);
+        emplace_back(std::move(value));
+        attic.retrieve(end());
+        return remove_const(pos);
+    }
+
+    constexpr iterator insert(const_iterator pos, size_type count, const T& value)
+    {
+        capacity_check(size() + count);
+        attic attic{*this, size() + count};
+        attic.store(pos);
+        for (; count != 0; --count) {
+            emplace_back(value);
         }
-        return it;
+        attic.retrieve(end());
+        return remove_const(pos);
     }
 
     template <typename... Args>
     constexpr reference emplace_back(Args&&... args)
     {
-        if (size() == capacity()) {
-            throw std::bad_alloc{};
-        }
+        capacity_check(size() + 1);
         const auto pos = storage_.construct_at(storage_.size(), std::forward<Args>(args)...);
         storage_.size(storage_.size() + 1);
         return *pos;
@@ -564,12 +565,66 @@ public:
     }
 
 private:
-    constexpr void range_check(std::size_t pos) const
+    friend class attic;
+    class attic
+    {
+    public:
+        constexpr attic(inplace_vector& v, size_type end)
+            : v_{v}
+            , begin_{end}
+            , end_{end}
+        {
+        }
+    
+        constexpr ~attic()
+        {
+            v_.storage_.destroy(begin_, end_);
+        }
+
+        constexpr void store(const_iterator pos)
+        {
+            for (; v_.end() != pos; --begin_) {
+                const auto v_last = v_.size() - 1;
+                v_.storage_.construct_at(begin_ - 1, std::move(*(v_.begin() + v_last)));
+                v_.storage_.destroy_at(v_last);
+                v_.storage_.size(v_last);
+            }
+        }
+
+        constexpr void retrieve(const_iterator pos)
+        {
+            if (pos == v_.begin() + begin_) {
+                begin_ = end_;
+                v_.storage_.size(end_);
+            } else {
+            }
+        }
+
+    private:
+        inplace_vector& v_;
+        size_type begin_;
+        size_type end_;
+    };
+
+    constexpr void range_check(size_type pos) const
     {
         if (pos >= size())
         {
             throw std::out_of_range{std::format("pos >= size() [{} >= {}]", pos, size())};
         }
+    }
+
+    static constexpr void capacity_check(size_type size)
+    {
+        if (size > capacity())
+        {
+            throw std::bad_alloc{};
+        }
+    }
+
+    constexpr iterator remove_const(const_iterator pos)
+    {
+        return begin() + (pos - begin());
     }
 
     [[no_unique_address]] inplace_vector_detail::storage<T, N> storage_;

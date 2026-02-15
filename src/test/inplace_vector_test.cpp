@@ -119,8 +119,6 @@ public:
 
     ~ThrowOnCopyOrMoveCounter() = default;
 
-    constexpr friend bool operator==(const ThrowOnCopyOrMoveCounter&, const ThrowOnCopyOrMoveCounter&) = default;
-
 private:
     std::size_t counter_;
 };
@@ -562,6 +560,31 @@ TYPED_TEST(InplaceVectorTest, can_move_insert_at_end)
         EXPECT_EQ(v.size(), starting_size + 1);
         EXPECT_EQ(v.back(), cvalue);
         EXPECT_TRUE(std::equal(v.begin(), v.end() - 1, chalf.begin(), chalf.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_count_insert)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_count_insert_at_end)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto count = half.size();
+        const auto value = typename TypeParam::value_type{200};
+
+        TypeParam v(half);
+        const auto starting_size = v.size();
+        const auto pos = v.insert(v.end(), count, value);
+        EXPECT_EQ(pos, v.end() - count);
+        EXPECT_EQ(v.size(), starting_size + count);
+        EXPECT_TRUE(std::equal(v.begin(), pos, half.begin(), half.end()));
+
+        const TypeParam expected(count, value);
+        EXPECT_TRUE(std::equal(pos, v.end(), expected.begin(), expected.end()));
     }
 }
 
