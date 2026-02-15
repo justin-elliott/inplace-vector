@@ -505,33 +505,55 @@ public:
     constexpr iterator insert(const_iterator pos, const value_type& value)
     {
         capacity_check(size() + 1);
-        attic attic{*this, size() + 1};
-        attic.store(pos);
+        attic attic{*this, size() + 1, pos};
         emplace_back(value);
-        attic.retrieve(end());
+        attic.retrieve();
         return remove_const(pos);
     }
 
     constexpr iterator insert(const_iterator pos, value_type&& value)
     {
         capacity_check(size() + 1);
-        attic attic{*this, size() + 1};
-        attic.store(pos);
+        attic attic{*this, size() + 1, pos};
         emplace_back(std::move(value));
-        attic.retrieve(end());
+        attic.retrieve();
         return remove_const(pos);
     }
 
     constexpr iterator insert(const_iterator pos, size_type count, const T& value)
     {
         capacity_check(size() + count);
-        attic attic{*this, size() + count};
-        attic.store(pos);
+        attic attic{*this, size() + count, pos};
         for (; count != 0; --count) {
             emplace_back(value);
         }
-        attic.retrieve(end());
+        attic.retrieve();
         return remove_const(pos);
+    }
+
+    template <std::input_iterator InputIt>
+    constexpr iterator insert(const_iterator pos, InputIt first, InputIt last)
+    {
+        if constexpr (std::random_access_iterator<InputIt>) {
+            // We can determine the size of the input range.
+            auto count = static_cast<size_type>(std::distance(first, last));
+            capacity_check(size() + count);
+            attic attic{*this, size() + count, pos};
+            for (; count != 0; --count) {
+                emplace_back(*first++);
+            }
+            attic.retrieve();
+            return remove_const(pos);
+        } else {
+            // We can't determine the size of the input range, so move the attic all the way up.
+            attic attic{*this, capacity(), pos};
+            while (first != last) {
+                attic.capacity_check(size());
+                emplace_back(*first++);
+            }
+            attic.retrieve(); // Moves the attic elements back into place.
+            return remove_const(pos);
+        }
     }
 
     template <typename... Args>
@@ -569,11 +591,23 @@ private:
     class attic
     {
     public:
-        constexpr attic(inplace_vector& v, size_type end)
+        constexpr attic(inplace_vector& v, size_type attic_end, const_iterator pos)
             : v_{v}
-            , begin_{end}
-            , end_{end}
+            , begin_{attic_end}
+            , end_{attic_end}
         {
+            if (begin_ == v_.size())
+            {
+                begin_ = static_cast<size_type>(pos - v_.begin());
+                v_.storage_.size(begin_);
+            } else {
+                for (; v_.end() != pos; --begin_) {
+                    const auto v_last = v_.size() - 1;
+                    v_.storage_.construct_at(begin_ - 1, std::move(*(v_.begin() + v_last)));
+                    v_.storage_.destroy_at(v_last);
+                    v_.storage_.size(v_last);
+                }
+            }
         }
     
         constexpr ~attic()
@@ -581,22 +615,24 @@ private:
             v_.storage_.destroy(begin_, end_);
         }
 
-        constexpr void store(const_iterator pos)
+        constexpr void retrieve()
         {
-            for (; v_.end() != pos; --begin_) {
-                const auto v_last = v_.size() - 1;
-                v_.storage_.construct_at(begin_ - 1, std::move(*(v_.begin() + v_last)));
-                v_.storage_.destroy_at(v_last);
-                v_.storage_.size(v_last);
-            }
-        }
-
-        constexpr void retrieve(const_iterator pos)
-        {
-            if (pos == v_.begin() + begin_) {
+            if (v_.size() == begin_) {
                 begin_ = end_;
                 v_.storage_.size(end_);
             } else {
+                for (; begin_ != end_; ++begin_) {
+                    v_.emplace_back(std::move(v_.storage_.data()[begin_]));
+                    v_.storage_.destroy_at(begin_);
+                }
+            }
+        }
+
+        constexpr void capacity_check(size_type pos) const
+        {
+            if (pos >= begin_)
+            {
+                throw std::bad_alloc{};
             }
         }
 

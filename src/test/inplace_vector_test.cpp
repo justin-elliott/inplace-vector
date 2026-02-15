@@ -123,6 +123,36 @@ private:
     std::size_t counter_;
 };
 
+template <typename Iter>
+class MoveInputIterator
+{
+public:
+    using difference_type   = typename std::move_iterator<Iter>::difference_type;
+    using value_type        = typename std::move_iterator<Iter>::value_type;
+    using pointer           = typename std::move_iterator<Iter>::pointer;
+    using reference         = typename std::move_iterator<Iter>::reference;
+    using iterator_category = std::input_iterator_tag;
+
+    explicit MoveInputIterator(Iter iter) : iter_{std::make_move_iterator(iter)} {}
+
+          reference operator*()       { return *iter_; }
+    const reference operator*() const { return *iter_; }
+
+    MoveInputIterator& operator++() { ++iter_; }
+
+    MoveInputIterator operator++(int)
+    {
+        auto tmp(*this);
+        ++iter_;
+        return tmp;
+    }
+
+    friend constexpr bool operator==(const MoveInputIterator&, const MoveInputIterator&) = default;
+
+private:
+    std::move_iterator<Iter> iter_;
+};
+
 using vector_types = testing::Types<
     jell::inplace_vector<std::size_t, 0>,
     jell::inplace_vector<std::size_t, 23>,
@@ -527,6 +557,15 @@ TYPED_TEST(InplaceVectorTest, can_insert_at_end)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, handles_insert_overflow)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        TypeParam v(this->make_vector());
+        const auto value = typename TypeParam::value_type{999};
+        EXPECT_THROW(v.insert(v.begin(), value), std::bad_alloc);
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_move_insert)
 {
     if constexpr (TypeParam::capacity() != 0) {
@@ -563,9 +602,31 @@ TYPED_TEST(InplaceVectorTest, can_move_insert_at_end)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, handles_move_insert_overflow)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        TypeParam v(this->make_vector());
+        auto value = typename TypeParam::value_type{999};
+        EXPECT_THROW(v.insert(v.begin(), std::move(value)), std::bad_alloc);
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_count_insert)
 {
     if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto count = half.size();
+        const auto value = typename TypeParam::value_type{200};
+
+        TypeParam v(half);
+        const auto starting_size = v.size();
+        const auto pos = v.insert(v.begin(), count, value);
+        EXPECT_EQ(pos, v.begin());
+        EXPECT_EQ(v.size(), starting_size + count);
+        EXPECT_TRUE(std::equal(v.begin() + count, v.end(), half.begin(), half.end()));
+
+        const TypeParam expected(count, value);
+        EXPECT_TRUE(std::equal(v.begin(), v.begin() + count, expected.begin(), expected.end()));
     }
 }
 
@@ -585,6 +646,98 @@ TYPED_TEST(InplaceVectorTest, can_count_insert_at_end)
 
         const TypeParam expected(count, value);
         EXPECT_TRUE(std::equal(pos, v.end(), expected.begin(), expected.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, handles_count_insert_overflow)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        TypeParam v(this->make_vector());
+        auto value = typename TypeParam::value_type{999};
+        EXPECT_THROW(v.insert(v.begin(), 1, value), std::bad_alloc);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_iterator_insert)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v(this->make_vector(TypeParam::capacity() / 2));
+        const auto starting_size = v.size();
+
+        auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto count = half.size();
+        const auto first = std::make_move_iterator(half.begin());
+        const auto last  = std::make_move_iterator(half.end());
+        const auto pos = v.insert(v.begin(), first, last);
+        EXPECT_EQ(pos, v.begin());
+        EXPECT_EQ(v.size(), starting_size + count);
+        EXPECT_TRUE(std::equal(v.begin() + count, v.end(), half.begin(), half.end()));
+
+        const TypeParam expected(this->make_vector(TypeParam::capacity() / 2));
+        EXPECT_TRUE(std::equal(v.begin(), v.begin() + count, expected.begin(), expected.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_iterator_insert_without_random_access)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v(this->make_vector(TypeParam::capacity() / 2));
+        const auto starting_size = v.size();
+
+        auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto count = half.size();
+        const auto first = MoveInputIterator{half.begin()};
+        const auto last  = MoveInputIterator{half.end()};
+        const auto pos = v.insert(v.begin(), first, last);
+        EXPECT_EQ(pos, v.begin());
+        EXPECT_EQ(v.size(), starting_size + count);
+        EXPECT_TRUE(std::equal(v.begin() + count, v.end(), half.begin(), half.end()));
+
+        const TypeParam expected(this->make_vector(TypeParam::capacity() / 2));
+        EXPECT_TRUE(std::equal(v.begin(), v.begin() + count, expected.begin(), expected.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_iterator_insert_at_end)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v(this->make_vector(TypeParam::capacity() / 2));
+        const auto starting_size = v.size();
+
+        auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto count = half.size();
+        const auto first = std::make_move_iterator(half.begin());
+        const auto last  = std::make_move_iterator(half.end());
+        const auto pos = v.insert(v.end(), first, last);
+        EXPECT_EQ(pos, v.end() - count);
+        EXPECT_EQ(v.size(), starting_size + count);
+        EXPECT_TRUE(std::equal(v.begin(), pos, half.begin(), half.end()));
+
+        const TypeParam expected(this->make_vector(TypeParam::capacity() / 2));
+        EXPECT_TRUE(std::equal(pos, v.end(), expected.begin(), expected.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, handles_iterator_insert_overflow)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v(this->make_vector());
+        TypeParam v_insert(this->make_vector(1));
+        EXPECT_THROW(v.insert(v.begin(),
+                              std::make_move_iterator(v_insert.begin()),
+                              std::make_move_iterator(v_insert.end())),
+                     std::bad_alloc);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, handles_iterator_insert_overflow_without_random_access)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v(this->make_vector());
+        TypeParam v_insert(this->make_vector(1));
+        const auto first = MoveInputIterator{v_insert.begin()};
+        const auto last  = MoveInputIterator{v_insert.end()};
+        EXPECT_THROW(v.insert(v.begin(), first, last), std::bad_alloc);
     }
 }
 
