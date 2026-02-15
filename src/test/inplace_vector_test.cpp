@@ -497,6 +497,74 @@ TYPED_TEST(InplaceVectorTest, shrink_to_fit)
     EXPECT_NO_THROW(v.shrink_to_fit());
 }
 
+TYPED_TEST(InplaceVectorTest, can_insert)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto value = typename TypeParam::value_type{200};
+
+        TypeParam v(half);
+        const auto starting_size = v.size();
+        const auto pos = v.insert(v.begin(), value);
+        EXPECT_EQ(pos, v.begin());
+        EXPECT_EQ(v.size(), starting_size + 1);
+        EXPECT_EQ(v.front(), value);
+        EXPECT_TRUE(std::equal(v.begin() + 1, v.end(), half.begin(), half.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_insert_at_end)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto value = typename TypeParam::value_type{200};
+
+        TypeParam v(half);
+        const auto starting_size = v.size();
+        const auto pos = v.insert(v.end(), value);
+        EXPECT_EQ(pos, v.end() - 1);
+        EXPECT_EQ(v.size(), starting_size + 1);
+        EXPECT_EQ(v.back(), value);
+        EXPECT_TRUE(std::equal(v.begin(), v.end() - 1, half.begin(), half.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_move_insert)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto chalf = this->make_vector(TypeParam::capacity() / 2);
+        auto value = typename TypeParam::value_type{200};
+        const auto cvalue = typename TypeParam::value_type{200};
+
+        TypeParam v(std::move(half));
+        const auto starting_size = v.size();
+        const auto pos = v.insert(v.begin(), std::move(value));
+        EXPECT_EQ(pos, v.begin());
+        EXPECT_EQ(v.size(), starting_size + 1);
+        EXPECT_EQ(v.front(), cvalue);
+        EXPECT_TRUE(std::equal(v.begin() + 1, v.end(), chalf.begin(), chalf.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_move_insert_at_end)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        auto half = this->make_vector(TypeParam::capacity() / 2);
+        const auto chalf = this->make_vector(TypeParam::capacity() / 2);
+        auto value = typename TypeParam::value_type{200};
+        const auto cvalue = typename TypeParam::value_type{200};
+
+        TypeParam v(std::move(half));
+        const auto starting_size = v.size();
+        const auto pos = v.insert(v.end(), std::move(value));
+        EXPECT_EQ(pos, v.end() - 1);
+        EXPECT_EQ(v.size(), starting_size + 1);
+        EXPECT_EQ(v.back(), cvalue);
+        EXPECT_TRUE(std::equal(v.begin(), v.end() - 1, chalf.begin(), chalf.end()));
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_emplace_back)
 {
     if constexpr (TypeParam::capacity() != 0) {

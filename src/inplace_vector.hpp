@@ -499,6 +499,38 @@ public:
 
     static constexpr void shrink_to_fit() noexcept {}
 
+    constexpr iterator insert(const_iterator pos, const value_type& value)
+    {
+        const auto it = begin() + (pos - begin());
+        if (it == end()) {
+            emplace_back(value);
+        } else {
+            auto last = end() - 1;
+            emplace_back(std::move(*last));
+            for (; last != it; --last) {
+                *last = std::move(*(last - 1));
+            }
+            *it = value;
+        }
+        return it;
+    }
+
+    constexpr iterator insert(const_iterator pos, value_type&& value)
+    {
+        const auto it = begin() + (pos - begin());
+        if (it == end()) {
+            emplace_back(std::move(value));
+        } else {
+            auto last = end() - 1;
+            emplace_back(std::move(*last));
+            for (; last != it; --last) {
+                *last = std::move(*(last - 1));
+            }
+            *it = std::move(value);
+        }
+        return it;
+    }
+
     template <typename... Args>
     constexpr reference emplace_back(Args&&... args)
     {
