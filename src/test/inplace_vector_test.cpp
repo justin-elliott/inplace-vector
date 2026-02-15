@@ -775,6 +775,48 @@ TYPED_TEST(InplaceVectorTest, handles_insert_range_overflow)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, can_emplace)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const auto half = this->make_vector(TypeParam::capacity() / 2);
+        const std::size_t raw_value = 200;
+        const auto value = typename TypeParam::value_type{raw_value};
+
+        TypeParam v(half);
+        const auto starting_size = v.size();
+        const auto pos = v.emplace(v.begin(), raw_value);
+        EXPECT_EQ(pos, v.begin());
+        EXPECT_EQ(v.size(), starting_size + 1);
+        EXPECT_EQ(v.front(), value);
+        EXPECT_TRUE(std::equal(v.begin() + 1, v.end(), half.begin(), half.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_emplace_at_end)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        const auto half = this->make_vector(TypeParam::capacity() / 2);
+        const std::size_t raw_value = 200;
+        const auto value = typename TypeParam::value_type{raw_value};
+
+        TypeParam v(half);
+        const auto starting_size = v.size();
+        const auto pos = v.emplace(v.end(), raw_value);
+        EXPECT_EQ(pos, v.end() - 1);
+        EXPECT_EQ(v.size(), starting_size + 1);
+        EXPECT_EQ(v.back(), value);
+        EXPECT_TRUE(std::equal(v.begin(), v.end() - 1, half.begin(), half.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, handles_emplace_overflow)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        TypeParam v(this->make_vector());
+        EXPECT_THROW(v.emplace(v.begin(), 999), std::bad_alloc);
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_emplace_back)
 {
     if constexpr (TypeParam::capacity() != 0) {

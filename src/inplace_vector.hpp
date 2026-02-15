@@ -575,6 +575,16 @@ public:
     }
 
     template <typename... Args>
+    constexpr iterator emplace(const_iterator pos, Args&&... args)
+    {
+        capacity_check(size() + 1);
+        attic attic{*this, size() + 1, pos};
+        emplace_back(std::forward<Args>(args)...);
+        attic.retrieve();
+        return remove_const(pos);
+    }
+
+    template <typename... Args>
     constexpr reference emplace_back(Args&&... args)
     {
         capacity_check(size() + 1);
