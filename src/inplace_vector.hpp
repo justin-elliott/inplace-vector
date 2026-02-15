@@ -561,6 +561,19 @@ public:
         return insert(pos, init.begin(), init.end());
     }
 
+    template <inplace_vector_detail::container_compatible_range<T> R>
+    constexpr iterator insert_range(const_iterator pos, R&& rg)
+    {
+        auto count = static_cast<size_type>(std::ranges::size(rg));
+        capacity_check(size() + count);
+        attic attic{*this, size() + count, pos};
+        for (auto&& value : rg) {
+            emplace_back(std::forward<decltype(value)>(value));
+        }
+        attic.retrieve();
+        return remove_const(pos);
+    }
+
     template <typename... Args>
     constexpr reference emplace_back(Args&&... args)
     {

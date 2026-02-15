@@ -756,6 +756,25 @@ TYPED_TEST(InplaceVectorTest, can_insert_initializer_list)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, can_insert_range)
+{
+    TypeParam v(this->make_vector(TypeParam::capacity() / 2));
+    const auto pos = v.insert_range(v.begin(), this->make_vector(TypeParam::capacity() / 2) | std::views::as_rvalue);
+    EXPECT_EQ(pos, v.begin());
+
+    TypeParam half(this->make_vector(TypeParam::capacity() / 2));
+    EXPECT_TRUE(std::equal(v.begin(), v.begin() + half.size(), half.begin(), half.end()));
+    EXPECT_TRUE(std::equal(v.begin() + half.size(), v.end(), half.begin(), half.end()));
+}
+
+TYPED_TEST(InplaceVectorTest, handles_insert_range_overflow)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v(this->make_vector());
+        EXPECT_THROW(v.insert_range(v.begin(), this->make_vector(1) | std::views::as_rvalue), std::bad_alloc);
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_emplace_back)
 {
     if constexpr (TypeParam::capacity() != 0) {
