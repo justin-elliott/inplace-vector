@@ -741,6 +741,21 @@ TYPED_TEST(InplaceVectorTest, handles_iterator_insert_overflow_without_random_ac
     }
 }
 
+TYPED_TEST(InplaceVectorTest, can_insert_initializer_list)
+{
+    using value_type = typename TypeParam::value_type;
+    if constexpr (std::is_copy_constructible_v<value_type>) {
+        if constexpr (TypeParam::capacity() >= 3) {
+            TypeParam v(1, value_type{300});
+            v.insert(v.begin(), {value_type{100}, value_type{200}});
+            EXPECT_EQ(v.size(), 3);
+            EXPECT_EQ(v.at(0), value_type{100});
+            EXPECT_EQ(v.at(1), value_type{200});
+            EXPECT_EQ(v.at(2), value_type{300});
+        }
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_emplace_back)
 {
     if constexpr (TypeParam::capacity() != 0) {

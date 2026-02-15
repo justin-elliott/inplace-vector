@@ -556,6 +556,11 @@ public:
         }
     }
 
+    constexpr iterator insert(const_iterator pos, std::initializer_list<T> init)
+    {
+        return insert(pos, init.begin(), init.end());
+    }
+
     template <typename... Args>
     constexpr reference emplace_back(Args&&... args)
     {
