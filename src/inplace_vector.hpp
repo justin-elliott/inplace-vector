@@ -387,13 +387,8 @@ public:
 
     template <inplace_vector_detail::container_compatible_range<T> R>
     constexpr inplace_vector(std::from_range_t, R&& rg)
+        : inplace_vector(std::ranges::begin(rg), std::ranges::end(rg))
     {
-        capacity_check(std::ranges::size(rg));
-        inplace_vector_detail::exception_guard guard{this};
-        for (auto&& value : rg) {
-            unchecked_emplace_back(std::forward<decltype(value)>(value));
-        }
-        guard.release();
     }
 
     constexpr inplace_vector(const inplace_vector& other) = default;
@@ -413,21 +408,30 @@ public:
 
     constexpr void assign(size_type count, const value_type& value)
     {
-        resize(size() + count, value);
+        capacity_check(count);
+        const auto last = begin() + std::min(size(), count);
+        for (auto first = begin(); first != last; ++first) {
+            *first = value;
+        }
+        resize(count, value);
     }
 
     template <std::input_iterator InputIt>
     constexpr void assign(InputIt first, InputIt last)
     {
-        clear();
-    
         if constexpr (std::random_access_iterator<InputIt>) {
             auto count = static_cast<size_type>(std::distance(first, last));
             capacity_check(count);
-            for (; count != 0; --count) {
-                unchecked_emplace_back(*first++);
+            const auto dest_end = begin() + std::min(size(), count);
+            for (auto dest = begin(); dest != dest_end; ++dest, ++first) {
+                *dest = *first;
             }
+            for (; first != last; ++first) {
+                unchecked_emplace_back(*first);
+            }
+            resize(count);
         } else {
+            clear();
             for (; first != last; ++first) {
                 emplace_back(*first);
             }
@@ -442,32 +446,29 @@ public:
     template <inplace_vector_detail::container_compatible_range<T> R>
     constexpr void assign_range(R&& rg)
     {
-        capacity_check(size() + std::ranges::size(rg));
-        for (auto&& value : rg) {
-            unchecked_emplace_back(std::forward<decltype(value)>(value));
-        }
+        assign(std::ranges::begin(rg), std::ranges::end(rg));
     }
 
     constexpr reference at(size_type pos)
     {
         range_check(pos);
-        return *(data() + pos);
+        return data()[pos];
     }
 
     constexpr const_reference at(size_type pos) const
     {
         range_check(pos);
-        return *(data() + pos);
+        return data()[pos];
     }
 
-    constexpr reference        operator[](size_type pos)       { return *(data() + pos); }
-    constexpr const_reference  operator[](size_type pos) const { return *(data() + pos); }
+    constexpr reference        operator[](size_type pos)       { return data()[pos]; }
+    constexpr const_reference  operator[](size_type pos) const { return data()[pos]; }
 
-    constexpr reference        front()                   { return *data(); }
-    constexpr const_reference  front()    const          { return *data(); }
+    constexpr reference        front()                   { return data()[0]; }
+    constexpr const_reference  front()    const          { return data()[0]; }
 
-    constexpr reference        back()                    { return *(data() + size() - 1); }
-    constexpr const_reference  back()     const          { return *(data() + size() - 1); }
+    constexpr reference        back()                    { return data()[size() - 1]; }
+    constexpr const_reference  back()     const          { return data()[size() - 1]; }
 
     constexpr pointer          data()     noexcept       { return storage_.data(); }
     constexpr const_pointer    data()     const noexcept { return storage_.data(); }
@@ -576,14 +577,7 @@ public:
     template <inplace_vector_detail::container_compatible_range<T> R>
     constexpr iterator insert_range(const_iterator pos, R&& rg)
     {
-        auto count = static_cast<size_type>(std::ranges::size(rg));
-        capacity_check(size() + count);
-        attic attic{*this, size() + count, pos};
-        for (auto&& value : rg) {
-            unchecked_emplace_back(std::forward<decltype(value)>(value));
-        }
-        attic.retrieve();
-        return remove_const(pos);
+        return insert(pos, std::ranges::begin(rg), std::ranges::end(rg));
     }
 
     template <typename... Args>

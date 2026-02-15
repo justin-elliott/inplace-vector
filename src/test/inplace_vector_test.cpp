@@ -333,24 +333,20 @@ TYPED_TEST(InplaceVectorTest, is_move_assignable_initially_nonempty_and_larger)
 TYPED_TEST(InplaceVectorTest, can_assign_count_values)
 {
     if constexpr (std::is_copy_assignable_v<typename TypeParam::value_type>) {
-        const typename TypeParam::value_type value_1{123};
-        const typename TypeParam::value_type value_2{456};
-        const auto lower_count = TypeParam::capacity() / 2;
-        const auto upper_count = TypeParam::capacity() - lower_count;
+        const auto value = typename TypeParam::value_type{123};
+        const auto count = TypeParam::capacity();
         
-        TypeParam v;
-        v.assign(lower_count, value_1);
-        v.assign(upper_count, value_2);
+        auto v = this->make_vector(count / 2); // Initially non-empty.
+        v.assign(count, value);
 
-        EXPECT_EQ(v.size(), TypeParam::capacity());
-        EXPECT_EQ(std::count(v.begin(), v.end(), value_1), lower_count);
-        EXPECT_EQ(std::count(v.begin(), v.end(), value_2), upper_count);
+        EXPECT_EQ(v.size(), count);
+        EXPECT_EQ(std::count(v.begin(), v.end(), value), count);
     }
 }
 
 TYPED_TEST(InplaceVectorTest, can_assign_iterator)
 {
-    TypeParam v;
+    TypeParam v = this->make_vector(TypeParam::capacity() / 2); // Initially non-empty.
     auto full = this->make_vector();
     v.assign(std::make_move_iterator(full.begin()),
              std::make_move_iterator(full.end()));
@@ -362,7 +358,7 @@ TYPED_TEST(InplaceVectorTest, can_assign_initializer_list)
     using value_type = typename TypeParam::value_type;
     if constexpr (std::is_copy_constructible_v<value_type>) {
         if constexpr (TypeParam::capacity() >= 3) {
-            TypeParam v;
+            TypeParam v = this->make_vector(); // Initially non-empty.
             v.assign({value_type{100}, value_type{200}, value_type{300}});
             EXPECT_EQ(v.size(), 3);
         }
@@ -371,9 +367,9 @@ TYPED_TEST(InplaceVectorTest, can_assign_initializer_list)
 
 TYPED_TEST(InplaceVectorTest, can_assign_range)
 {
-    TypeParam v;
-    v.assign_range(this->make_vector() | std::views::as_rvalue);
-    EXPECT_EQ(v, this->make_vector());
+    TypeParam v = this->make_vector(); // Initially non-empty.
+    v.assign_range(this->make_vector(TypeParam::capacity() / 2) | std::views::as_rvalue);
+    EXPECT_EQ(v, this->make_vector(TypeParam::capacity() / 2));
 }
 
 TYPED_TEST(InplaceVectorTest, at_in_range)
