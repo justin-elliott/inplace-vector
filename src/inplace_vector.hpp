@@ -362,7 +362,7 @@ public:
         capacity_check(count);
         inplace_vector_detail::exception_guard guard{this};
         while (count--) {
-            emplace_back();
+            unchecked_emplace_back();
         }
         guard.release();
     }
@@ -372,7 +372,7 @@ public:
         capacity_check(count);
         inplace_vector_detail::exception_guard guard{this};
         while (count--) {
-            emplace_back(value);
+            unchecked_emplace_back(value);
         }
         guard.release();
     }
@@ -388,9 +388,10 @@ public:
     template <inplace_vector_detail::container_compatible_range<T> R>
     constexpr inplace_vector(std::from_range_t, R&& rg)
     {
+        capacity_check(std::ranges::size(rg));
         inplace_vector_detail::exception_guard guard{this};
         for (auto&& value : rg) {
-            emplace_back(std::forward<decltype(value)>(value));
+            unchecked_emplace_back(std::forward<decltype(value)>(value));
         }
         guard.release();
     }
@@ -418,8 +419,18 @@ public:
     template <std::input_iterator InputIt>
     constexpr void assign(InputIt first, InputIt last)
     {
-        for (; first != last; ++first) {
-            emplace_back(*first);
+        clear();
+    
+        if constexpr (std::random_access_iterator<InputIt>) {
+            auto count = static_cast<size_type>(std::distance(first, last));
+            capacity_check(count);
+            for (; count != 0; --count) {
+                unchecked_emplace_back(*first++);
+            }
+        } else {
+            for (; first != last; ++first) {
+                emplace_back(*first);
+            }
         }
     }
 
@@ -431,8 +442,9 @@ public:
     template <inplace_vector_detail::container_compatible_range<T> R>
     constexpr void assign_range(R&& rg)
     {
+        capacity_check(size() + std::ranges::size(rg));
         for (auto&& value : rg) {
-            emplace_back(std::forward<decltype(value)>(value));
+            unchecked_emplace_back(std::forward<decltype(value)>(value));
         }
     }
 
@@ -480,7 +492,7 @@ public:
             storage_.size(count);
         }
         while (size() < count) {
-            emplace_back();
+            unchecked_emplace_back();
         }
     }
 
@@ -491,7 +503,7 @@ public:
             storage_.size(count);
         }
         while (size() < count) {
-            emplace_back(value);
+            unchecked_emplace_back(value);
         }
     }
 
@@ -506,7 +518,7 @@ public:
     {
         capacity_check(size() + 1);
         attic attic{*this, size() + 1, pos};
-        emplace_back(value);
+        unchecked_emplace_back(value);
         attic.retrieve();
         return remove_const(pos);
     }
@@ -515,7 +527,7 @@ public:
     {
         capacity_check(size() + 1);
         attic attic{*this, size() + 1, pos};
-        emplace_back(std::move(value));
+        unchecked_emplace_back(std::move(value));
         attic.retrieve();
         return remove_const(pos);
     }
@@ -525,7 +537,7 @@ public:
         capacity_check(size() + count);
         attic attic{*this, size() + count, pos};
         for (; count != 0; --count) {
-            emplace_back(value);
+            unchecked_emplace_back(value);
         }
         attic.retrieve();
         return remove_const(pos);
@@ -540,7 +552,7 @@ public:
             capacity_check(size() + count);
             attic attic{*this, size() + count, pos};
             for (; count != 0; --count) {
-                emplace_back(*first++);
+                unchecked_emplace_back(*first++);
             }
             attic.retrieve();
             return remove_const(pos);
@@ -549,7 +561,7 @@ public:
             attic attic{*this, capacity(), pos};
             while (first != last) {
                 attic.capacity_check(size());
-                emplace_back(*first++);
+                unchecked_emplace_back(*first++);
             }
             attic.retrieve(); // Moves the attic elements back into place.
             return remove_const(pos);
@@ -568,7 +580,7 @@ public:
         capacity_check(size() + count);
         attic attic{*this, size() + count, pos};
         for (auto&& value : rg) {
-            emplace_back(std::forward<decltype(value)>(value));
+            unchecked_emplace_back(std::forward<decltype(value)>(value));
         }
         attic.retrieve();
         return remove_const(pos);
@@ -579,7 +591,7 @@ public:
     {
         capacity_check(size() + 1);
         attic attic{*this, size() + 1, pos};
-        emplace_back(std::forward<Args>(args)...);
+        unchecked_emplace_back(std::forward<Args>(args)...);
         attic.retrieve();
         return remove_const(pos);
     }
@@ -588,6 +600,23 @@ public:
     constexpr reference emplace_back(Args&&... args)
     {
         capacity_check(size() + 1);
+        return unchecked_emplace_back(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    constexpr pointer try_emplace_back(Args&&... args)
+    {
+        if (size() >= capacity()) {
+            return nullptr;
+        }
+        const auto pos = storage_.construct_at(storage_.size(), std::forward<Args>(args)...);
+        storage_.size(storage_.size() + 1);
+        return pos;
+    }
+
+    template <typename... Args>
+    constexpr reference unchecked_emplace_back(Args&&... args)
+    {
         const auto pos = storage_.construct_at(storage_.size(), std::forward<Args>(args)...);
         storage_.size(storage_.size() + 1);
         return *pos;
@@ -650,7 +679,7 @@ private:
                 v_.storage_.size(end_);
             } else {
                 for (; begin_ != end_; ++begin_) {
-                    v_.emplace_back(std::move(v_.storage_.data()[begin_]));
+                    v_.unchecked_emplace_back(std::move(v_.storage_.data()[begin_]));
                     v_.storage_.destroy_at(begin_);
                 }
             }

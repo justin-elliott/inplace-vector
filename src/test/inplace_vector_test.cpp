@@ -831,6 +831,20 @@ TYPED_TEST(InplaceVectorTest, handles_emplace_back_overflow)
     EXPECT_THROW(full.emplace_back(typename TypeParam::value_type{999}), std::bad_alloc);
 }
 
+TYPED_TEST(InplaceVectorTest, can_try_emplace_back)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v;
+        EXPECT_NE(v.try_emplace_back(typename TypeParam::value_type{100}), nullptr);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, handles_try_emplace_back_overflow)
+{
+    auto full = this->make_vector();
+    EXPECT_EQ(full.try_emplace_back(typename TypeParam::value_type{999}), nullptr);
+}
+
 TYPED_TEST(InplaceVectorTest, can_pop_back)
 {
     if constexpr (TypeParam::capacity() != 0) {
