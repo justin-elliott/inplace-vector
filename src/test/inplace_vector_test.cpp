@@ -1036,6 +1036,36 @@ TYPED_TEST(InplaceVectorTest, can_swap_lhs_greater)
     EXPECT_EQ(rhs, expected_rhs);
 }
 
+TYPED_TEST(InplaceVectorTest, can_erase_value)
+{
+    using value_type = typename TypeParam::value_type;
+
+    TypeParam v;
+    for (std::size_t i = 0; i != v.capacity(); ++i) {
+        v.emplace_back(100 + (i & 1));
+    }
+
+    std::erase(v, value_type{100});
+
+    const auto expected_value = value_type{101};
+    EXPECT_EQ(std::count(v.begin(), v.end(), expected_value), v.size());
+}
+
+TYPED_TEST(InplaceVectorTest, can_erase_predicate)
+{
+    using value_type = typename TypeParam::value_type;
+
+    TypeParam v;
+    for (std::size_t i = 0; i != v.capacity(); ++i) {
+        v.emplace_back(100 + (i & 1));
+    }
+
+    std::erase_if(v, [i = 0](const value_type&) mutable { return (i++ & 1) == 0; });
+
+    const auto expected_value = value_type{101};
+    EXPECT_EQ(std::count(v.begin(), v.end(), expected_value), v.size());
+}
+
 TYPED_TEST(InplaceVectorTest, can_compare_iterators)
 {
     TypeParam v;

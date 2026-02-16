@@ -814,4 +814,24 @@ constexpr void swap(jell::inplace_vector<T, N>& lhs, jell::inplace_vector<T, N>&
     lhs.swap(rhs);
 }
 
+template <typename T, std::size_t N, typename U = T>
+constexpr auto erase(jell::inplace_vector<T, N>& c, const U& value)
+{
+    using vector = jell::inplace_vector<T, N>;
+    auto iter = std::remove(c.begin(), c.end(), value);
+    auto erase_count = static_cast<typename vector::size_type>(std::distance(iter, c.end()));
+    c.erase(iter, c.end());
+    return erase_count;
+}
+
+template <typename T, std::size_t N, typename Predicate>
+constexpr auto erase_if(jell::inplace_vector<T, N>& c, Predicate predicate)
+{
+    using vector = jell::inplace_vector<T, N>;
+    auto iter = std::remove_if(c.begin(), c.end(), predicate);
+    auto erase_count = static_cast<typename vector::size_type>(std::distance(iter, c.end()));
+    c.erase(iter, c.end());
+    return erase_count;
+}
+
 } // namespace std
