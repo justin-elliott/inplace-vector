@@ -899,6 +899,47 @@ TYPED_TEST(InplaceVectorTest, can_pop_back)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, can_append_range)
+{
+    TypeParam v(this->make_vector(TypeParam::capacity() / 2));
+    v.append_range(this->make_vector(TypeParam::capacity() / 2) | std::views::as_rvalue);
+
+    TypeParam half(this->make_vector(TypeParam::capacity() / 2));
+    EXPECT_TRUE(std::equal(v.begin(), v.begin() + half.size(), half.begin(), half.end()));
+    EXPECT_TRUE(std::equal(v.begin() + half.size(), v.end(), half.begin(), half.end()));
+}
+
+TYPED_TEST(InplaceVectorTest, handles_append_range_overflow)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v(this->make_vector());
+        EXPECT_THROW(v.append_range(this->make_vector(1) | std::views::as_rvalue), std::bad_alloc);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_try_append_range)
+{
+    auto v = this->make_vector(TypeParam::capacity() / 2);
+    auto append = this->make_vector(TypeParam::capacity() / 2) | std::views::as_rvalue;
+    const auto append_end = std::ranges::end(append);
+    EXPECT_EQ(v.try_append_range(append), append_end);
+
+    TypeParam half(this->make_vector(TypeParam::capacity() / 2));
+    EXPECT_TRUE(std::equal(v.begin(), v.begin() + half.size(), half.begin(), half.end()));
+    EXPECT_TRUE(std::equal(v.begin() + half.size(), v.end(), half.begin(), half.end()));
+}
+
+TYPED_TEST(InplaceVectorTest, handles_try_append_range_overflow)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        auto v = this->make_vector(TypeParam::capacity() / 2);
+        auto append = this->make_vector() | std::views::as_rvalue;
+        const auto append_end = std::ranges::end(append);
+        EXPECT_NE(v.try_append_range(append), append_end);
+        EXPECT_EQ(v.size(), v.capacity());
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_clear)
 {
     auto v = this->make_vector();

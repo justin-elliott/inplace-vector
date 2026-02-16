@@ -650,6 +650,27 @@ public:
         storage_.size(size() - 1);
     }
 
+    template <inplace_vector_detail::container_compatible_range<T> R>
+    constexpr void append_range(R&& rg)
+    {
+        capacity_check(size() + std::ranges::size(rg));
+        for (auto&& value : rg) {
+            unchecked_emplace_back(std::forward<decltype(value)>(value));
+        }
+    }
+
+    template <inplace_vector_detail::container_compatible_range<T> R>
+    constexpr std::ranges::borrowed_iterator_t<R> try_append_range(R&& rg)
+    {
+        const auto available = capacity() - size();
+        auto count = std::min(std::ranges::size(rg), available);
+        auto pos = std::ranges::begin(rg);
+        for (; count != 0; ++pos, --count) {
+            unchecked_emplace_back(*pos);
+        }
+        return pos;
+    }
+
     constexpr void clear() noexcept
     {
         storage_.clear();
