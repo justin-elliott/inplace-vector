@@ -997,6 +997,45 @@ TYPED_TEST(InplaceVectorTest, can_erase_last)
     }
 }
 
+TYPED_TEST(InplaceVectorTest, can_swap_same_size)
+{
+    const auto expected_lhs = this->make_vector();
+    const auto expected_rhs = this->make_vector();
+
+    auto lhs = this->make_vector();
+    auto rhs = this->make_vector();
+    std::swap(lhs, rhs);
+
+    EXPECT_EQ(lhs, expected_lhs);
+    EXPECT_EQ(rhs, expected_rhs);
+}
+
+TYPED_TEST(InplaceVectorTest, can_swap_lhs_smaller)
+{
+    const auto expected_lhs = this->make_vector();
+    const auto expected_rhs = this->make_vector(TypeParam::capacity() / 2);
+
+    auto lhs = this->make_vector(TypeParam::capacity() / 2);
+    auto rhs = this->make_vector();
+    std::swap(lhs, rhs);
+
+    EXPECT_EQ(lhs, expected_lhs);
+    EXPECT_EQ(rhs, expected_rhs);
+}
+
+TYPED_TEST(InplaceVectorTest, can_swap_lhs_greater)
+{
+    const auto expected_lhs = this->make_vector(TypeParam::capacity() / 2);
+    const auto expected_rhs = this->make_vector();
+
+    auto lhs = this->make_vector();
+    auto rhs = this->make_vector(TypeParam::capacity() / 2);
+    std::swap(lhs, rhs);
+
+    EXPECT_EQ(lhs, expected_lhs);
+    EXPECT_EQ(rhs, expected_rhs);
+}
+
 TYPED_TEST(InplaceVectorTest, can_compare_iterators)
 {
     TypeParam v;

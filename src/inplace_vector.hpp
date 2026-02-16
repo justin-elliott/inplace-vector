@@ -694,6 +694,25 @@ public:
         return remove_const(first);
     }
 
+    constexpr void swap(inplace_vector& other)
+        noexcept(N == 0 || (std::is_nothrow_swappable_v<T> && std::is_nothrow_move_constructible_v<T>))
+    {
+        auto swap_count = std::min(size(), other.size());
+        size_type i = 0;
+        for (; i < swap_count; ++i) {
+            std::swap((*this)[i], other[i]);
+        }
+        if (i < other.size()) {
+            const auto first = other.begin() + i;
+            append_range(std::ranges::subrange(first, other.end()) | std::views::as_rvalue);
+            other.erase(first, other.end());
+        } else if (i < size()) {
+            const auto first = begin() + i;
+            other.append_range(std::ranges::subrange(first, end()) | std::views::as_rvalue);
+            erase(first, end());
+        }
+    }
+
     constexpr friend bool operator==(const inplace_vector& lhs, const inplace_vector& rhs)
     {
         return std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
@@ -785,3 +804,14 @@ private:
 };
 
 } // namespace jell
+
+namespace std {
+
+template <typename T, std::size_t N>
+constexpr void swap(jell::inplace_vector<T, N>& lhs, jell::inplace_vector<T, N>& rhs)
+    noexcept(N == 0 || (std::is_nothrow_swappable_v<T> && std::is_nothrow_move_constructible_v<T>))
+{
+    lhs.swap(rhs);
+}
+
+} // namespace std
