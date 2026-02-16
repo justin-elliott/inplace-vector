@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2026 Justin Elliott
+// Copyright (c) 2026 Justin Elliott (github.com/justin-elliott)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -1172,17 +1172,17 @@ TYPED_TEST(InplaceVectorTest, can_use_subtraction_on_iterators)
 
 TEST(StorageTest, can_call_members_in_zero_size)
 {
-    using storage = jell::inplace_vector_detail::storage<int, 0>;
-    storage s;
+    using storage_type = jell::detail::inplace_vector::storage<int, 0>;
+    storage_type storage;
 
-    EXPECT_EQ(s.data(), nullptr);
-    EXPECT_EQ(const_cast<const storage&>(s).data(), nullptr);
-    EXPECT_EQ(s.size(), 0);
-    EXPECT_EQ(const_cast<const storage&>(s).size(), 0);
+    EXPECT_EQ(storage.data(), nullptr);
+    EXPECT_EQ(const_cast<const storage_type&>(storage).data(), nullptr);
+    EXPECT_EQ(storage.size(), 0);
+    EXPECT_EQ(const_cast<const storage_type&>(storage).size(), 0);
 
-    EXPECT_NO_THROW(s.size(0));
-    EXPECT_NO_THROW(s.construct_at(0, 100));
-    EXPECT_NO_THROW(s.destroy_at(0));
-    EXPECT_NO_THROW(s.destroy(0, 0));
-    EXPECT_NO_THROW(s.clear());
+    EXPECT_NO_THROW(storage.size(0));
+    EXPECT_NO_THROW(storage.construct_at(0, 100));
+    EXPECT_NO_THROW(storage.destroy_at(0));
+    EXPECT_NO_THROW(storage.destroy(0, 0));
+    EXPECT_NO_THROW(storage.clear());
 }
