@@ -603,9 +603,7 @@ public:
         if (size() >= capacity()) {
             return nullptr;
         }
-        const auto pos = storage_.construct_at(storage_.size(), std::forward<Args>(args)...);
-        storage_.size(storage_.size() + 1);
-        return pos;
+        return std::addressof(unchecked_emplace_back(std::forward<Args>(args)...));
     }
 
     template <typename... Args>
@@ -614,6 +612,36 @@ public:
         const auto pos = storage_.construct_at(storage_.size(), std::forward<Args>(args)...);
         storage_.size(storage_.size() + 1);
         return *pos;
+    }
+
+    constexpr reference push_back(const value_type& value)
+    {
+        return emplace_back(value);
+    }
+
+    constexpr reference push_back(value_type&& value)
+    {
+        return emplace_back(std::move(value));
+    }
+
+    constexpr pointer try_push_back(const value_type& value)
+    {
+        return try_emplace_back(value);
+    }
+
+    constexpr pointer try_push_back(value_type&& value)
+    {
+        return try_emplace_back(std::move(value));
+    }
+
+    constexpr reference unchecked_push_back(const value_type& value)
+    {
+        return unchecked_emplace_back(value);
+    }
+
+    constexpr reference unchecked_push_back(value_type&& value)
+    {
+        return unchecked_emplace_back(std::move(value));
     }
 
     constexpr void pop_back()

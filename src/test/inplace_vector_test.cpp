@@ -817,7 +817,10 @@ TYPED_TEST(InplaceVectorTest, can_emplace_back)
 {
     if constexpr (TypeParam::capacity() != 0) {
         TypeParam v;
-        v.emplace_back(typename TypeParam::value_type{100});
+        const std::size_t raw_value = 123;
+        const auto value = typename TypeParam::value_type{raw_value};
+        v.emplace_back(raw_value);
+        EXPECT_EQ(v.at(0), value);
     }
 }
 
@@ -831,7 +834,10 @@ TYPED_TEST(InplaceVectorTest, can_try_emplace_back)
 {
     if constexpr (TypeParam::capacity() != 0) {
         TypeParam v;
-        EXPECT_NE(v.try_emplace_back(typename TypeParam::value_type{100}), nullptr);
+        const std::size_t raw_value = 123;
+        const auto value = typename TypeParam::value_type{raw_value};
+        EXPECT_NE(v.try_emplace_back(raw_value), nullptr);
+        EXPECT_EQ(v.at(0), value);
     }
 }
 
@@ -839,6 +845,48 @@ TYPED_TEST(InplaceVectorTest, handles_try_emplace_back_overflow)
 {
     auto full = this->make_vector();
     EXPECT_EQ(full.try_emplace_back(typename TypeParam::value_type{999}), nullptr);
+}
+
+TYPED_TEST(InplaceVectorTest, can_push_back)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        TypeParam v;
+        const auto value = typename TypeParam::value_type{123};
+        v.push_back(value);
+        EXPECT_EQ(v.at(0), value);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_push_back_rvalue)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v;
+        auto value = typename TypeParam::value_type{123};
+        const auto cvalue = typename TypeParam::value_type{123};
+        v.push_back(std::move(value));
+        EXPECT_EQ(v.at(0), cvalue);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_try_push_back)
+{
+    if constexpr (TypeParam::capacity() != 0 && std::is_copy_constructible_v<typename TypeParam::value_type>) {
+        TypeParam v;
+        const auto value = typename TypeParam::value_type{123};
+        EXPECT_NE(v.try_push_back(value), nullptr);
+        EXPECT_EQ(v.at(0), value);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_try_push_back_rvalue)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        TypeParam v;
+        auto value = typename TypeParam::value_type{123};
+        const auto cvalue = typename TypeParam::value_type{123};
+        EXPECT_NE(v.try_push_back(std::move(value)), nullptr);
+        EXPECT_EQ(v.at(0), cvalue);
+    }
 }
 
 TYPED_TEST(InplaceVectorTest, can_pop_back)
