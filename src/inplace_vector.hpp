@@ -233,7 +233,7 @@ public:
 
     constexpr iterator operator++(int)
     {
-        iterator tmp{pos_};
+        auto tmp{*this};
         ++(*this);
         return tmp;
     }
@@ -247,7 +247,7 @@ public:
 
     constexpr iterator operator--(int)
     {
-        iterator tmp{pos_};
+        auto tmp{*this};
         --(*this);
         return tmp;
     }
@@ -676,6 +676,24 @@ public:
         storage_.clear();
     }
 
+    constexpr iterator erase(const_iterator pos)
+    {
+        return erase(pos, pos + 1);
+    }
+
+    constexpr iterator erase(const_iterator first, const_iterator last)
+    {
+        auto dst = remove_const(first);
+        auto src = remove_const(last);
+        while (src != end()) {
+            *dst++ = std::move(*src++);
+        }
+        const auto new_size = dst - begin();
+        storage_.destroy(new_size, size());
+        storage_.size(new_size);
+        return remove_const(first);
+    }
+
     constexpr friend bool operator==(const inplace_vector& lhs, const inplace_vector& rhs)
     {
         return std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
@@ -696,7 +714,7 @@ private:
             , begin_{attic_end}
             , end_{attic_end}
         {
-            if (begin_ == v_.size())
+            if (begin_ <= v_.size())
             {
                 begin_ = static_cast<size_type>(pos - v_.begin());
                 v_.storage_.size(begin_);

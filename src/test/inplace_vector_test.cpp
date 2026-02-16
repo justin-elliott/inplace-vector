@@ -947,6 +947,56 @@ TYPED_TEST(InplaceVectorTest, can_clear)
     EXPECT_EQ(v.size(), 0);
 }
 
+TYPED_TEST(InplaceVectorTest, can_erase_single)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        auto v = this->make_vector();
+        const auto starting_size = v.size();
+        const auto result_iter = v.erase(v.begin());
+        EXPECT_EQ(result_iter, v.begin());
+        EXPECT_EQ(v.size(), starting_size - 1);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_erase_single_last)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        auto v = this->make_vector();
+        const auto starting_size = v.size();
+        const auto result_iter = v.erase(v.end() - 1);
+        EXPECT_EQ(result_iter, v.end());
+        EXPECT_EQ(v.size(), starting_size - 1);
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_erase)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        auto v = this->make_vector();
+        const auto starting_size = v.size();
+        const auto result_iter = v.erase(v.begin(), v.begin() + starting_size / 2);
+        EXPECT_EQ(result_iter, v.begin());
+        EXPECT_EQ(v.size(), starting_size - starting_size / 2);
+
+        const auto expected = this->make_vector();
+        EXPECT_TRUE(std::equal(v.begin(), v.end(), expected.begin() + starting_size / 2, expected.end()));
+    }
+}
+
+TYPED_TEST(InplaceVectorTest, can_erase_last)
+{
+    if constexpr (TypeParam::capacity() != 0) {
+        auto v = this->make_vector();
+        const auto starting_size = v.size();
+        const auto result_iter = v.erase(v.begin() + starting_size / 2, v.end());
+        EXPECT_EQ(result_iter, v.end());
+        EXPECT_EQ(v.size(), starting_size / 2);
+
+        const auto expected = this->make_vector();
+        EXPECT_TRUE(std::equal(v.begin(), v.end(), expected.begin(), expected.begin() + starting_size / 2));
+    }
+}
+
 TYPED_TEST(InplaceVectorTest, can_compare_iterators)
 {
     TypeParam v;
