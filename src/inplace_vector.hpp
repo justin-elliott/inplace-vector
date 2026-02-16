@@ -755,7 +755,7 @@ private:
             , begin_{attic_end}
             , end_{attic_end}
         {
-            if (begin_ <= v_.size())
+            if (begin_ == v_.size())
             {
                 begin_ = static_cast<size_type>(pos - v_.begin());
                 v_.storage_.size(begin_);
