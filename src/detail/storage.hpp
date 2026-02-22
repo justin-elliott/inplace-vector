@@ -67,7 +67,7 @@ public:
     constexpr ~storage() requires std::is_trivially_destructible_v<T> = default;
     constexpr ~storage()
     {
-        clear();
+        destroy(0, size_);
     }
 
     constexpr storage& operator=(const storage&) noexcept requires std::is_trivially_copy_assignable_v<T> = default;
