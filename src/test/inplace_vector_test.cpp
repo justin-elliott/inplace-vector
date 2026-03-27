@@ -1181,8 +1181,4 @@ TEST(StorageTest, can_call_members_in_zero_size)
     EXPECT_EQ(const_cast<const storage_type&>(storage).size(), 0);
 
     EXPECT_NO_THROW(storage.size(0));
-    EXPECT_NO_THROW(storage.construct_at(0, 100));
-    EXPECT_NO_THROW(storage.destroy_at(0));
-    EXPECT_NO_THROW(storage.destroy(0, 0));
-    EXPECT_NO_THROW(storage.clear());
 }

@@ -39,51 +39,81 @@ template <typename T, std::size_t N>
     requires std::is_move_constructible_v<T> && std::is_move_assignable_v<T>
 class inplace_vector
 {
-private:
-    using storage_type           = detail::inplace_vector::storage<T, N>;
-    using attic_type             = detail::inplace_vector::attic<T, N>;
-
 public:
-    using size_type              = storage_type::size_type;
-    using difference_type        = storage_type::difference_type;
-    using value_type             = storage_type::value_type;
-    using pointer                = storage_type::pointer;
-    using const_pointer          = storage_type::const_pointer;
+    using size_type              = std::size_t;
+    using difference_type        = std::ptrdiff_t;
+    using value_type             = std::remove_cv_t<T>;
+    using pointer                = value_type*;
+    using const_pointer          = const value_type*;
     using reference              = value_type&;
     using const_reference        = const value_type&;
-    using iterator               = detail::inplace_vector::iterator<T>;
-    using const_iterator         = detail::inplace_vector::iterator<const T>;
+    using iterator               = detail::inplace_vector::iterator<value_type>;
+    using const_iterator         = detail::inplace_vector::iterator<const value_type>;
     using reverse_iterator       = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
+private:
+    using storage_type           = detail::inplace_vector::storage<value_type, N>;
+    using attic_type             = detail::inplace_vector::attic<value_type, N>;
+
+    class exception_guard
+    {
+    public:
+        exception_guard(inplace_vector* guarded) noexcept : guarded_{guarded} {}
+        ~exception_guard()
+        {
+            if (guarded_) {
+                guarded_->clear();
+            }
+        }
+        void release() noexcept { guarded_ = nullptr; }
+    
+    private:
+        inplace_vector* guarded_;
+    };
+
+public:
     constexpr inplace_vector() noexcept = default;
 
     constexpr explicit inplace_vector(size_type count)
     {
         capacity_check(count);
-        storage_.exception_guard([&] {
-            while (count--) {
-                unchecked_emplace_back();
-            }
-        });
+        exception_guard guard{this};
+        while (count--) {
+            unchecked_emplace_back();
+        }
+        guard.release();
     }
 
     constexpr inplace_vector(size_type count, const value_type& value)
     {
         capacity_check(count);
-        storage_.exception_guard([&] {
-            while (count--) {
-                unchecked_emplace_back(value);
-            }
-        });
+        exception_guard guard{this};
+        while (count--) {
+            unchecked_emplace_back(value);
+        }
+        guard.release();
     }
 
     template <std::input_iterator InputIt>
     constexpr inplace_vector(InputIt first, InputIt last)
     {
-        storage_.exception_guard([&] {
-            assign(std::move(first), std::move(last));
-        });
+        if constexpr (std::random_access_iterator<InputIt>) {
+            auto count = static_cast<size_type>(std::distance(first, last));
+            capacity_check(count);
+        }
+
+        exception_guard guard{this};
+        if constexpr (std::random_access_iterator<InputIt>) {
+            for (; first != last; ++first) {
+                unchecked_emplace_back(*first);
+            }
+        } else {
+            for (; first != last; ++first) {
+                emplace_back(*first);
+            }
+        }
+        guard.release();
     }
 
     template <detail::container_compatible_range<T> R>
@@ -92,20 +122,52 @@ public:
     {
     }
 
-    constexpr inplace_vector(const inplace_vector& other) = default;
+    constexpr inplace_vector(const inplace_vector& other)
+    {
+        exception_guard guard{this};
+        for (auto first = other.begin(); first != other.end(); ++first) {
+            unchecked_emplace_back(*first);
+        }
+        guard.release();
+    }
+
     constexpr inplace_vector(inplace_vector&& other)
-        noexcept(N == 0 || std::is_nothrow_move_constructible_v<T>) = default;
+        noexcept(N == 0 || std::is_nothrow_move_constructible_v<T>)
+    {
+        exception_guard guard{this};
+        for (auto first = other.begin(); first != other.end(); ++first) {
+            unchecked_emplace_back(std::move(*first));
+        }
+        guard.release();
+    }
 
     constexpr inplace_vector(std::initializer_list<value_type> init)
         : inplace_vector(init.begin(), init.end())
     {
     }
 
-    constexpr ~inplace_vector() = default;
+    constexpr ~inplace_vector() requires std::is_trivially_destructible_v<T> = default;
+    constexpr ~inplace_vector()
+    {
+        std::destroy_n(data(), size());
+    }
 
-    constexpr inplace_vector& operator=(const inplace_vector& other) = default;
+    constexpr inplace_vector& operator=(const inplace_vector& other)
+    {
+        if (this != &other) {
+            assign(other.begin(), other.end());
+        }
+        return *this;
+    }
+
     constexpr inplace_vector& operator=(inplace_vector&& other)
-        noexcept(N == 0 || (std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>)) = default;
+        noexcept(N == 0 || (std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>))
+    {
+        if (this != &other) {
+            assign(std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()));
+        }
+        return *this;
+    }
 
     constexpr void assign(size_type count, const value_type& value)
     {
@@ -190,8 +252,7 @@ public:
     void resize(size_type count)
     {
         if (size() > count) {
-            storage_.destroy(count, size());
-            storage_.size(count);
+            clear_from(count);
         }
         while (size() < count) {
             unchecked_emplace_back();
@@ -201,8 +262,7 @@ public:
     void resize(size_type count, const value_type& value)
     {
         if (size() > count) {
-            storage_.destroy(count, size());
-            storage_.size(count);
+            clear_from(count);
         }
         while (size() < count) {
             unchecked_emplace_back(value);
@@ -310,7 +370,7 @@ public:
     template <typename... Args>
     constexpr reference unchecked_emplace_back(Args&&... args)
     {
-        const auto pos = storage_.construct_at(storage_.size(), std::forward<Args>(args)...);
+        const auto pos = std::construct_at(data() + size(), std::forward<Args>(args)...);
         storage_.size(storage_.size() + 1);
         return *pos;
     }
@@ -347,7 +407,7 @@ public:
 
     constexpr void pop_back()
     {
-        storage_.destroy_at(size() - 1);
+        std::destroy_at(data() + size() - 1);
         storage_.size(size() - 1);
     }
 
@@ -374,7 +434,7 @@ public:
 
     constexpr void clear() noexcept
     {
-        storage_.clear();
+        clear_from(0);
     }
 
     constexpr iterator erase(const_iterator pos)
@@ -390,8 +450,7 @@ public:
             *dst++ = std::move(*src++);
         }
         const auto new_size = dst - begin();
-        storage_.destroy(new_size, size());
-        storage_.size(new_size);
+        clear_from(new_size);
         return remove_const(first);
     }
 
@@ -444,6 +503,12 @@ private:
     constexpr iterator remove_const(const_iterator pos)
     {
         return begin() + (pos - begin());
+    }
+
+    constexpr void clear_from(size_type n) noexcept
+    {
+        std::destroy_n(data() + n, size() - n);
+        storage_.size(n);
     }
 
     [[no_unique_address]] storage_type storage_;

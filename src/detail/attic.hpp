@@ -34,21 +34,19 @@ private:
     using storage_type = detail::inplace_vector::storage<T, N>;
 
 public:
-    using size_type = storage_type::size_type;
-
     /// Destructively move-construct elements in the range [save_pos..storage.size()) into the attic,
     /// [attic_end - storage.size() + save_pos..attic_end).
     /// @param storage The storage in which to move elements.
     /// @param save_pos The position from which to move elements.
     /// @param attic_end The end position of the attic, into which to save elements.
     template <std::random_access_iterator Iterator>
-    constexpr attic(storage_type& storage, Iterator save_pos, size_type attic_end)
+    constexpr attic(storage_type& storage, Iterator save_pos, std::size_t attic_end)
         : storage_{storage}
         , begin_{attic_end}
         , end_{attic_end}
     {
         // Note that operator->() explicitly allows dereferencing at the end().
-        const auto save_index = static_cast<size_type>(save_pos.operator->() - storage_.data());
+        const auto save_index = static_cast<std::size_t>(save_pos.operator->() - storage_.data());
     
         if (begin_ == storage_.size())
         {
@@ -57,8 +55,8 @@ public:
         } else {
             for (; storage_.size() != save_index; --begin_) {
                 const auto last_index = storage_.size() - 1;
-                storage_.construct_at(begin_ - 1, std::move(storage_.data()[last_index]));
-                storage_.destroy_at(last_index);
+                std::construct_at(storage_.data() + (begin_ - 1), std::move(storage_.data()[last_index]));
+                std::destroy_at(storage_.data() + last_index);
                 storage_.size(last_index);
             }
         }
@@ -67,7 +65,7 @@ public:
     /// Destroy any remaining entries in the attic (typically only during an exception).
     constexpr ~attic()
     {
-        storage_.destroy(begin_, end_);
+        std::destroy(storage_.data() + begin_, storage_.data() + end_);
     }
 
     /// Retrieve all elements from the attic, destructively move-constructing them if they are not already in their
@@ -79,8 +77,8 @@ public:
             storage_.size(end_);
         } else {
             for (; begin_ != end_; ++begin_) {
-                storage_.construct_at(storage_.size(), std::move(storage_.data()[begin_]));
-                storage_.destroy_at(begin_);
+                std::construct_at(storage_.data() + storage_.size(), std::move(storage_.data()[begin_]));
+                std::destroy_at(storage_.data() + begin_);
                 storage_.size(storage_.size() + 1);
             }
         }
@@ -88,7 +86,7 @@ public:
 
     /// Check that the position is not within the bounds of the attic or above, throwing bad_alloc if the check fails.
     /// @param pos The position to check.
-    constexpr void capacity_check(size_type pos) const
+    constexpr void capacity_check(std::size_t pos) const
     {
         if (pos >= begin_)
         {
@@ -98,8 +96,8 @@ public:
 
 private:
     storage_type& storage_;
-    size_type begin_;
-    size_type end_;
+    std::size_t begin_;
+    std::size_t end_;
 };
 
 } // namespace jell::detail::inplace_vector
