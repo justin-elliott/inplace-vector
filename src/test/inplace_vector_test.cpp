@@ -31,6 +31,12 @@ static_assert(jell::inplace_vector<int, 0>::max_size() == 0);
 static_assert(jell::inplace_vector<int, 0>::capacity() == 0);
 static_assert(jell::inplace_vector<int, 0>{}.data() == nullptr);
 
+static_assert(std::is_trivially_copy_constructible_v<jell::inplace_vector<int, 1>>);
+static_assert(std::is_trivially_copy_assignable_v<jell::inplace_vector<int, 1>>);
+static_assert(std::is_trivially_move_constructible_v<jell::inplace_vector<int, 1>>);
+static_assert(std::is_trivially_move_assignable_v<jell::inplace_vector<int, 1>>);
+static_assert(std::is_trivially_destructible_v<jell::inplace_vector<int, 1>>);
+
 static_assert(std::random_access_iterator<jell::inplace_vector<int, 1>::iterator>);
 static_assert(std::contiguous_iterator<jell::inplace_vector<int, 1>::iterator>);
 
