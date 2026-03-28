@@ -22,7 +22,6 @@
 
 #pragma once
 
-#include "detail/attic.hpp"
 #include "detail/container_compatible_range.hpp"
 #include "detail/iterator.hpp"
 #include "detail/storage.hpp"
@@ -52,27 +51,6 @@ public:
     using reverse_iterator       = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-private:
-    using storage_type           = detail::inplace_vector::storage<value_type, N>;
-    using attic_type             = detail::inplace_vector::attic<value_type, N>;
-
-    class exception_guard
-    {
-    public:
-        exception_guard(inplace_vector* guarded) noexcept : guarded_{guarded} {}
-        ~exception_guard()
-        {
-            if (guarded_) {
-                std::destroy_n(guarded_->data(), guarded_->size());
-            }
-        }
-        void release() noexcept { guarded_ = nullptr; }
-    
-    private:
-        inplace_vector* guarded_;
-    };
-
-public:
     constexpr inplace_vector() noexcept = default;
 
     constexpr explicit inplace_vector(size_type count)
@@ -285,7 +263,7 @@ public:
     constexpr iterator insert(const_iterator pos, const value_type& value)
     {
         capacity_check(size() + 1);
-        attic_type attic{storage_, pos, size() + 1};
+        attic attic{this, pos, size() + 1};
         unchecked_emplace_back(value);
         attic.retrieve();
         return remove_const(pos);
@@ -294,7 +272,7 @@ public:
     constexpr iterator insert(const_iterator pos, value_type&& value)
     {
         capacity_check(size() + 1);
-        attic_type attic{storage_, pos, size() + 1};
+        attic attic{this, pos, size() + 1};
         unchecked_emplace_back(std::move(value));
         attic.retrieve();
         return remove_const(pos);
@@ -303,7 +281,7 @@ public:
     constexpr iterator insert(const_iterator pos, size_type count, const T& value)
     {
         capacity_check(size() + count);
-        attic_type attic{storage_, pos, size() + count};
+        attic attic{this, pos, size() + count};
         for (; count != 0; --count) {
             unchecked_emplace_back(value);
         }
@@ -318,7 +296,7 @@ public:
             // We can determine the size of the input range.
             auto count = static_cast<size_type>(std::distance(first, last));
             capacity_check(size() + count);
-            attic_type attic{storage_, pos, size() + count};
+            attic attic{this, pos, size() + count};
             for (; count != 0; --count) {
                 unchecked_emplace_back(*first++);
             }
@@ -326,7 +304,7 @@ public:
             return remove_const(pos);
         } else {
             // We can't determine the size of the input range, so move the attic all the way up.
-            attic_type attic{storage_, pos, capacity()};
+            attic attic{this, pos, capacity()};
             while (first != last) {
                 attic.capacity_check(size());
                 unchecked_emplace_back(*first++);
@@ -351,7 +329,7 @@ public:
     constexpr iterator emplace(const_iterator pos, Args&&... args)
     {
         capacity_check(size() + 1);
-        attic_type attic{storage_, pos, size() + 1};
+        attic attic{this, pos, size() + 1};
         unchecked_emplace_back(std::forward<Args>(args)...);
         attic.retrieve();
         return remove_const(pos);
@@ -490,6 +468,90 @@ public:
     }
 
 private:
+    class attic
+    {
+    public:
+        /// Destructively move-construct elements in the range [save_pos..storage.size()) into the attic,
+        /// [attic_end - storage.size() + save_pos..attic_end).
+        /// @param vec The inplace_vetor in which to move elements.
+        /// @param save_pos The position from which to move elements.
+        /// @param attic_end The end position of the attic, into which to save elements.
+        template <std::random_access_iterator Iterator>
+        constexpr attic(inplace_vector* vec, Iterator save_pos, std::size_t attic_end)
+            : vec_{vec}
+            , begin_{attic_end}
+            , end_{attic_end}
+        {
+            // Note that operator->() explicitly allows dereferencing at the end().
+            const auto save_index = static_cast<std::size_t>(save_pos.operator->() - vec_->data());
+        
+            if (begin_ == vec_->size())
+            {
+                begin_ = save_index;
+                vec_->size(begin_);
+            } else {
+                for (; vec_->size() != save_index; --begin_) {
+                    const auto last_index = vec_->size() - 1;
+                    std::construct_at(vec_->data() + (begin_ - 1), std::move(vec_->data()[last_index]));
+                    std::destroy_at(vec_->data() + last_index);
+                    vec_->size(last_index);
+                }
+            }
+        }
+
+        /// Destroy any remaining entries in the attic (typically only during an exception).
+        constexpr ~attic()
+        {
+            std::destroy(vec_->data() + begin_, vec_->data() + end_);
+        }
+
+        /// Retrieve all elements from the attic, destructively move-constructing them if they are not already in their
+        /// required location, and adjust the storage.size().
+        constexpr void retrieve()
+        {
+            if (vec_->size() == begin_) {
+                begin_ = end_;
+                vec_->size(end_);
+            } else {
+                for (; begin_ != end_; ++begin_) {
+                    vec_->unchecked_emplace_back(std::move(vec_->data()[begin_]));
+                    std::destroy_at(vec_->data() + begin_);
+                }
+            }
+        }
+
+        /// Check that the position is not within the bounds of the attic or above, throwing bad_alloc if the check fails.
+        /// @param pos The position to check.
+        constexpr void capacity_check(std::size_t pos) const
+        {
+            if (pos >= begin_) {
+                throw std::bad_alloc{};
+            }
+        }
+
+    private:
+        inplace_vector* vec_;
+        size_type begin_;
+        size_type end_;
+    };
+    friend class attic;
+
+    class exception_guard
+    {
+    public:
+        exception_guard(inplace_vector* vec) noexcept : vec_{vec} {}
+        ~exception_guard()
+        {
+            if (vec_) {
+                std::destroy_n(vec_->data(), vec_->size());
+            }
+        }
+        void release() noexcept { vec_ = nullptr; }
+    
+    private:
+        inplace_vector* vec_;
+    };
+
     constexpr void range_check(size_type pos) const
     {
         if (pos >= size())
@@ -506,8 +568,9 @@ private:
         }
     }
 
-    constexpr pointer       data_end()       noexcept { return data() + size(); }
-    constexpr const_pointer data_end() const noexcept { return data() + size(); }
+    constexpr void          size(size_type n) noexcept { storage_.size(n); }
+    constexpr pointer       data_end()        noexcept { return data() + size(); }
+    constexpr const_pointer data_end()  const noexcept { return data() + size(); }
 
     constexpr iterator remove_const(const_iterator pos)
     {
@@ -520,7 +583,7 @@ private:
         storage_.size(n);
     }
 
-    [[no_unique_address]] storage_type storage_;
+    [[no_unique_address]] detail::inplace_vector::storage<value_type, N> storage_;
 };
 
 } // namespace jell
