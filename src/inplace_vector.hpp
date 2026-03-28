@@ -63,7 +63,7 @@ private:
         ~exception_guard()
         {
             if (guarded_) {
-                guarded_->clear();
+                std::destroy_n(guarded_->data(), guarded_->size());
             }
         }
         void release() noexcept { guarded_ = nullptr; }
@@ -193,14 +193,12 @@ public:
         if constexpr (std::random_access_iterator<InputIt>) {
             auto count = static_cast<size_type>(std::distance(first, last));
             capacity_check(count);
-            const auto dest_end = begin() + std::min(size(), count);
-            for (auto dest = begin(); dest != dest_end; ++dest, ++first) {
-                *dest = *first;
+            const auto last_copyable = first + std::min(size(), count);
+            std::copy(first, last_copyable, data());
+            for (auto pos = last_copyable; pos != last; ++pos) {
+                unchecked_emplace_back(*pos);
             }
-            for (; first != last; ++first) {
-                unchecked_emplace_back(*first);
-            }
-            resize(count);
+            truncate(count);
         } else {
             clear();
             for (; first != last; ++first) {
@@ -248,8 +246,8 @@ public:
     constexpr const_iterator   begin()    const noexcept { return const_iterator{data(), data(), size()}; }
     constexpr const_iterator   cbegin()   const noexcept { return begin(); }
 
-    constexpr iterator         end()      noexcept       { return iterator{data() + size(), data(), size()}; }
-    constexpr const_iterator   end()      const noexcept { return const_iterator{data() + size(), data(), size()}; }
+    constexpr iterator         end()      noexcept       { return iterator{data_end(), data(), size()}; }
+    constexpr const_iterator   end()      const noexcept { return const_iterator{data_end(), data(), size()}; }
     constexpr const_iterator   cend()     const noexcept { return end(); }
 
     constexpr bool             empty()    const noexcept { return size() == 0; }
@@ -260,7 +258,7 @@ public:
     void resize(size_type count)
     {
         if (size() > count) {
-            clear_from(count);
+            truncate(count);
         }
         while (size() < count) {
             unchecked_emplace_back();
@@ -270,7 +268,7 @@ public:
     void resize(size_type count, const value_type& value)
     {
         if (size() > count) {
-            clear_from(count);
+            truncate(count);
         }
         while (size() < count) {
             unchecked_emplace_back(value);
@@ -378,7 +376,7 @@ public:
     template <typename... Args>
     constexpr reference unchecked_emplace_back(Args&&... args)
     {
-        const auto pos = std::construct_at(data() + size(), std::forward<Args>(args)...);
+        const auto pos = std::construct_at(data_end(), std::forward<Args>(args)...);
         storage_.size(storage_.size() + 1);
         return *pos;
     }
@@ -415,7 +413,7 @@ public:
 
     constexpr void pop_back()
     {
-        std::destroy_at(data() + size() - 1);
+        std::destroy_at(data_end() - 1);
         storage_.size(size() - 1);
     }
 
@@ -442,7 +440,7 @@ public:
 
     constexpr void clear() noexcept
     {
-        clear_from(0);
+        truncate(0);
     }
 
     constexpr iterator erase(const_iterator pos)
@@ -458,7 +456,7 @@ public:
             *dst++ = std::move(*src++);
         }
         const auto new_size = dst - begin();
-        clear_from(new_size);
+        truncate(new_size);
         return remove_const(first);
     }
 
@@ -508,12 +506,15 @@ private:
         }
     }
 
+    constexpr pointer       data_end()       noexcept { return data() + size(); }
+    constexpr const_pointer data_end() const noexcept { return data() + size(); }
+
     constexpr iterator remove_const(const_iterator pos)
     {
         return begin() + (pos - begin());
     }
 
-    constexpr void clear_from(size_type n) noexcept
+    constexpr void truncate(size_type n) noexcept
     {
         std::destroy_n(data() + n, size() - n);
         storage_.size(n);
