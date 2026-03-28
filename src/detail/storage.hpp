@@ -38,8 +38,8 @@ class storage
 public:
     [[nodiscard]] constexpr std::size_t size()        const noexcept { return size_; }
                   constexpr void        size(std::size_t n) noexcept { size_ = n; }
-    [[nodiscard]] constexpr T*          data()              noexcept { return reinterpret_cast<T*>(data_.v); }
-    [[nodiscard]] constexpr const T*    data()        const noexcept { return reinterpret_cast<const T*>(data_.v); }
+    [[nodiscard]] constexpr T*          data()              noexcept { return data_.data; }
+    [[nodiscard]] constexpr const T*    data()        const noexcept { return data_.data; }
 
 private:
     union uninit
@@ -50,13 +50,19 @@ private:
         constexpr uninit(const uninit&) noexcept requires std::is_trivially_copy_constructible_v<T> = default;
         constexpr uninit(const uninit&) noexcept {}
 
+        constexpr uninit(uninit&&) noexcept requires std::is_trivially_move_constructible_v<T> = default;
+        constexpr uninit(uninit&&) noexcept {}
+
         constexpr ~uninit() requires std::is_trivially_destructible_v<T> = default;
         constexpr ~uninit() {}
 
         constexpr uninit& operator=(const uninit&) noexcept requires std::is_trivially_copy_assignable_v<T> = default;
         constexpr uninit& operator=(const uninit&) noexcept { return *this; }
 
-        T v[N];
+        constexpr uninit& operator=(uninit&&) noexcept requires std::is_trivially_move_assignable_v<T> = default;
+        constexpr uninit& operator=(uninit&&) noexcept { return *this; }
+
+        T data[N];
     };
 
     std::size_t size_{0};

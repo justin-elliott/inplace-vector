@@ -123,7 +123,7 @@ public:
     }
 
     constexpr inplace_vector(const inplace_vector&) noexcept
-        requires std::is_trivially_copy_constructible_v<storage_type> = default;
+        requires std::is_trivially_copy_constructible_v<T> = default;
     constexpr inplace_vector(const inplace_vector& other)
     {
         exception_guard guard{this};
@@ -134,7 +134,7 @@ public:
     }
 
     constexpr inplace_vector(inplace_vector&&) noexcept
-        requires std::is_trivially_move_constructible_v<storage_type> = default;
+        requires std::is_trivially_move_constructible_v<T> = default;
     constexpr inplace_vector(inplace_vector&& other)
         noexcept(N == 0 || std::is_nothrow_move_constructible_v<T>)
     {
@@ -157,7 +157,7 @@ public:
     }
 
     constexpr inplace_vector& operator=(const inplace_vector&) noexcept
-        requires std::is_trivially_copy_assignable_v<storage_type> = default;
+        requires std::is_trivially_copy_assignable_v<T> = default;
     constexpr inplace_vector& operator=(const inplace_vector& other)
     {
         if (this != &other) {
@@ -167,7 +167,7 @@ public:
     }
 
     constexpr inplace_vector& operator=(inplace_vector&&) noexcept
-        requires std::is_trivially_move_assignable_v<storage_type> = default;
+        requires std::is_trivially_move_assignable_v<T> = default;
     constexpr inplace_vector& operator=(inplace_vector&& other)
         noexcept(N == 0 || (std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>))
     {
