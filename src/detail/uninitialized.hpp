@@ -22,41 +22,22 @@
 
 #pragma once
 
-#include "detail/uninitialized.hpp"
-
-#include <cstddef>
-#include <memory>
 #include <type_traits>
-#include <utility>
 
 namespace jell::detail::inplace_vector {
 
-/// Storage for the inplace_vector.
+/// An uninitialized value.
 /// @tparam T The element type.
-/// @tparam N The number of elements to allocate in the storage.
-template <typename T, std::size_t N>
-class storage
-{
-public:
-    [[nodiscard]] constexpr std::size_t size()        const noexcept { return size_; }
-                  constexpr void        size(std::size_t n) noexcept { size_ = n; }
-    [[nodiscard]] constexpr T*          data()              noexcept { return data_.value; }
-    [[nodiscard]] constexpr const T*    data()        const noexcept { return data_.value; }
-
-private:
-    std::size_t size_{0};
-    uninitialized<T[N]> data_;
-};
-
-/// Storage specialization for a zero-sized inplace_vector.
 template <typename T>
-class storage<T, 0>
+union uninitialized
 {
-public:
-    [[nodiscard]] constexpr std::size_t size()        const noexcept { return 0; }
-                  constexpr void        size(std::size_t)   noexcept { }
-    [[nodiscard]] constexpr T*          data()              noexcept { return nullptr; }
-    [[nodiscard]] constexpr const T*    data()        const noexcept { return nullptr; }
+    constexpr uninitialized() noexcept requires std::is_trivially_constructible_v<T> = default;
+    constexpr uninitialized() noexcept {}
+
+    constexpr ~uninitialized() requires std::is_trivially_destructible_v<T> = default;
+    constexpr ~uninitialized() {}
+
+    T value;
 };
 
 } // namespace jell::detail::inplace_vector

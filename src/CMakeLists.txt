@@ -7,6 +7,7 @@ add_library(
     detail/inplace_vector_forward.hpp
     detail/iterator.hpp
     detail/storage.hpp
+    detail/uninitialized.hpp
 )
 target_include_directories(
     InplaceVector INTERFACE

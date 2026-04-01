@@ -1188,3 +1188,16 @@ TEST(StorageTest, can_call_members_in_zero_size)
 
     EXPECT_NO_THROW(storage.size(0));
 }
+
+#ifdef NOT_CURRENTLY_IMPLEMENTABLE
+
+constexpr std::size_t constexpr_push_back()
+{
+    jell::inplace_vector<std::string, 3> v;
+    v.push_back("This is a reasonably long string");
+    return v.size();
+}
+
+static_assert(constexpr_push_back() == 1);
+
+#endif // NOT_CURRENTLY_IMPLEMENTABLE
