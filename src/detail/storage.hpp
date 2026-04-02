@@ -40,12 +40,12 @@ class storage
 public:
     [[nodiscard]] constexpr std::size_t size()        const noexcept { return size_; }
                   constexpr void        size(std::size_t n) noexcept { size_ = n; }
-    [[nodiscard]] constexpr T*          data()              noexcept { return data_.value; }
-    [[nodiscard]] constexpr const T*    data()        const noexcept { return data_.value; }
+    [[nodiscard]] constexpr T*          data()              noexcept { return std::addressof(data_[0].value); }
+    [[nodiscard]] constexpr const T*    data()        const noexcept { return std::addressof(data_[0].value); }
 
 private:
     std::size_t size_{0};
-    uninitialized<T[N]> data_;
+    uninitialized<T> data_[N];
 };
 
 /// Storage specialization for a zero-sized inplace_vector.
